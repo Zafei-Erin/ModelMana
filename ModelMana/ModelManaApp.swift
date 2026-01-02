@@ -10,8 +10,14 @@ import SwiftUI
 @main
 struct ModelManaApp: App {
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra("ModelMana", systemImage: "circle.fill") {
+            ProviderListView()
         }
+
+        Window("Provider Settings", id: "settings") {
+            SettingsWindowView()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 400, height: 350)
     }
 }
