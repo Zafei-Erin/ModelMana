@@ -20,16 +20,25 @@ struct ConfigService {
         configDir.appendingPathComponent(configFileName)
     }
 
-    /// 读取配置，如果不存在则创建默认配置
+    /// 读取配置
     static func loadConfiguration() -> AppConfiguration {
+        print("[ConfigService] loadConfiguration, path: \(configPath.path)")
+
         if FileManager.default.fileExists(atPath: configPath.path) {
             do {
                 let data = try Data(contentsOf: configPath)
-                return try JSONDecoder().decode(AppConfiguration.self, from: data)
+                let config = try JSONDecoder().decode(AppConfiguration.self, from: data)
+                print("[ConfigService] Loaded \(config.providers.count) providers")
+                for p in config.providers {
+                    print("[ConfigService]   - \(p.name): id=\(p.id), \(p.apiKeys.count) keys")
+                }
+                return config
             } catch {
-                print("Failed to load config: \(error)")
+                print("[ConfigService] ERROR: \(error)")
             }
         }
+
+        print("[ConfigService] Creating default config")
         return createDefaultConfiguration()
     }
 
@@ -43,18 +52,28 @@ struct ConfigService {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
         try data.write(to: configPath)
+        print("[ConfigService] Config saved")
     }
 
-    /// 创建默认配置
+    /// 创建默认配置（包含预置的 providers）
     private static func createDefaultConfiguration() -> AppConfiguration {
-        let providers = Provider.allCases.map { provider in
+        let providers = [
+            // Zhipu
             ProviderConfig(
-                id: provider.id,
-                name: provider.rawValue,
-                baseUrl: provider.baseURL,
-                apiKey: EnvService.read(provider.envKey) ?? ""
+                id: "zhipu",
+                name: "Zhipu",
+                baseUrl: "https://open.bigmodel.cn/api/anthropic",
+                apiKeys: []
+            ),
+            // Claude
+            ProviderConfig(
+                id: "claude",
+                name: "Claude",
+                baseUrl: "https://api.anthropic.com",
+                apiKeys: []
             )
-        }
-        return AppConfiguration(providers: providers, selectedProviderId: nil)
+        ]
+
+        return AppConfiguration(providers: providers, selectedProviderId: nil, selectedApiKeyId: nil)
     }
 }

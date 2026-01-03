@@ -8,199 +8,255 @@
 import SwiftUI
 
 struct ProviderListView: View {
-    @State private var appState = AppState.shared
-    @State private var selectedProvider: Provider?
-    @State private var errorMessage: String?
-    @State private var successMessage: String?
     @Environment(\.openWindow) private var openWindow
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("ModelMana")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            // Provider List
-            VStack(spacing: 0) {
-                ForEach(Provider.allCases) { provider in
-                    ProviderRowView(
-                        provider: provider,
-                        isSelected: selectedProvider == provider,
-                        apiKey: appState.configuration.providers.first { $0.id == provider.id }?.apiKey
-                    ) {
-                        selectProvider(provider)
-                    }
-                }
-            }
-
-            Divider()
-
-            // Messages
-            if let error = errorMessage {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                    Spacer()
-                    Button(action: { clearMessages() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(8)
-                .background(Color.orange.opacity(0.1))
-            } else if let success = successMessage {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text(success)
-                        .font(.caption)
-                        .foregroundColor(.green)
-                    Spacer()
-                    Button(action: { clearMessages() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(8)
-                .background(Color.green.opacity(0.1))
-            }
-
-            Divider()
-
-            // Footer Buttons
-            VStack(spacing: 0) {
-                Button(action: {
-                    openWindow(id: "settings")
-                }) {
-                    HStack {
-                        Image(systemName: "gearshape")
-                        Text("Settings")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.vertical, 8)
-
-                Divider()
-
-                Button(action: {
-                    NSApplication.shared.terminate(nil)
-                }) {
-                    HStack {
-                        Image(systemName: "power")
-                        Text("Quit")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.vertical, 8)
-            }
+    // 动态计算当前 provider
+    private var currentProviderConfig: ProviderConfig? {
+        let config = AppState.shared.configuration
+        // 优先使用配置中的 selectedProviderId
+        if let selectedId = config.selectedProviderId {
+            return config.providers.first { $0.id == selectedId }
         }
-        .frame(width: 240)
-        .onAppear {
-            selectedProvider = SettingsFileService.getCurrentProvider()
+        // 降级：从文件读取
+        if let baseUrl = getCurrentProviderBaseURL() {
+            return config.providers.first { $0.baseUrl == baseUrl }
         }
+        return nil
     }
 
-    private func selectProvider(_ provider: Provider) {
-        guard let providerConfig = appState.configuration.providers.first(where: { $0.id == provider.id }),
-              !providerConfig.apiKey.isEmpty else {
-            errorMessage = "未找到 \(provider.rawValue) 的 API Key，请先在设置中配置"
-            successMessage = nil
+    var body: some View {
+        let config = AppState.shared.configuration
+        return VStack(spacing: 0) {
+            // Header
+            Text("ModelMana")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+            Divider()
+
+            // Current Provider Section
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Current Provider")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+
+                if let current = currentProviderConfig {
+                    ProviderSection(
+                        providerConfig: current,
+                        selectedApiKeyId: config.selectedApiKeyId,
+                        isCurrent: true,
+                        onSelectApiKey: { apiKeyId in
+                            selectApiKey(providerConfig: current, apiKeyId: apiKeyId)
+                        }
+                    )
+                }
+            }
+
+            Divider()
+
+            // Available Providers Section
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Available Providers")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+
+                ForEach(config.providers) { provider in
+                    if provider.id != currentProviderConfig?.id {
+                        ProviderSection(
+                            providerConfig: provider,
+                            selectedApiKeyId: config.selectedApiKeyId,
+                            isCurrent: false,
+                            onSelectApiKey: { apiKeyId in
+                                selectApiKey(providerConfig: provider, apiKeyId: apiKeyId)
+                            }
+                        )
+                    }
+                }
+            }
+
+            Divider()
+
+            // Settings
+            Button(action: {
+                openWindow(id: "settings")
+            }) {
+                Text("Settings")
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            // Quit
+            Button(action: {
+                NSApplication.shared.terminate(nil)
+            }) {
+                Text("Quit")
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+        .background(Color(red: 0.16, green: 0.16, blue: 0.16))
+    }
+
+    private func getCurrentProviderBaseURL() -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json")),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let env = json["env"] as? [String: Any],
+              let baseURL = env["ANTHROPIC_BASE_URL"] as? String else {
+            return nil
+        }
+        return baseURL
+    }
+
+    private func selectApiKey(providerConfig: ProviderConfig, apiKeyId: String) {
+        guard let apiKeyConfig = providerConfig.apiKeys.first(where: { $0.id == apiKeyId }) else {
             return
         }
 
         do {
             try SettingsFileService.writeSettings(
-                provider: provider,
-                apiKey: providerConfig.apiKey
+                baseUrl: providerConfig.baseUrl,
+                apiKey: apiKeyConfig.key
             )
-            appState.configuration.selectedProviderId = provider.id
-            selectedProvider = provider
-            successMessage = "已切换到 \(provider.rawValue)"
-            errorMessage = nil
-        } catch {
-            errorMessage = "切换失败: \(error.localizedDescription)"
-            successMessage = nil
-        }
-    }
+            var newConfig = AppState.shared.configuration
+            newConfig.selectedProviderId = providerConfig.id
+            newConfig.selectedApiKeyId = apiKeyId
+            AppState.shared.configuration = newConfig
 
-    private func clearMessages() {
-        errorMessage = nil
-        successMessage = nil
+            print("[ModelMana] Selected: \(providerConfig.name) / \(apiKeyConfig.name)")
+        } catch {
+            print("[ModelMana] ERROR: \(error.localizedDescription)")
+        }
     }
 }
 
-struct ProviderRowView: View {
-    let provider: Provider
-    let isSelected: Bool
-    let apiKey: String?
-    let onTap: () -> Void
-
-    // 遮盖 API key，只显示前缀和后4位
-    private var maskedApiKey: String {
-        guard let key = apiKey, !key.isEmpty else {
-            return "未设置 - 点击设置配置"
-        }
-        if key.count <= 8 {
-            return String(repeating: "•", count: key.count)
-        }
-        let prefix = String(key.prefix(4))
-        let suffix = String(key.suffix(4))
-        return "\(prefix)...\(suffix)"
-    }
+// Provider Section (使用 Menu 子菜单)
+struct ProviderSection: View {
+    let providerConfig: ProviderConfig
+    let selectedApiKeyId: String?
+    let isCurrent: Bool
+    let onSelectApiKey: (String) -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundColor(isSelected ? .accentColor : .secondary)
+        Menu {
+            // API Keys 列表
+            if !providerConfig.apiKeys.isEmpty {
+                ForEach(providerConfig.apiKeys) { keyConfig in
+                    Button {
+                        onSelectApiKey(keyConfig.id)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: keyConfig.id == selectedApiKeyId ? "checkmark" : "circle")
+                                .frame(width: 16)
 
-                    Text(provider.rawValue)
-                        .foregroundColor(.primary)
+                            Text(keyConfig.name)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button(action: {
+                    openSettings()
+                }) {
+                    Text("No API keys - Open Settings")
+                }
+            }
+        } label: {
+            // Provider Header Row (作为 Menu 的触发器)
+            HStack(spacing: 12) {
+                // Provider Icon
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 32, height: 32)
 
-                    Spacer()
-
-                    if apiKey != nil && !apiKey!.isEmpty {
-                        Image(systemName: "checkmark.shield.fill")
-                            .font(.caption)
-                            .foregroundColor(.green)
+                    if providerConfig.id == "zhipu" {
+                        Image("zhipu")
+                            .renderingMode(.template)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
+                    } else if providerConfig.id == "claude" {
+                        Image("claude")
+                            .renderingMode(.template)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
                     } else {
-                        Image(systemName: "exclamationmark.shield.fill")
-                            .font(.caption)
-                            .foregroundColor(.red)
+                        Image(systemName: "server.rack")
+                            .font(.system(size: 14))
+                            .foregroundColor(.black)
                     }
                 }
 
-                // 显示遮盖后的 API key
-                Text(maskedApiKey)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(apiKey != nil && !apiKey!.isEmpty ? .secondary : .red.opacity(0.7))
+                // Provider Name and Key Count
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(providerConfig.name)
+                        .font(.system(size: 12))
+                        .foregroundColor(.primary)
+
+                    if providerConfig.apiKeys.isEmpty {
+                        Text("No API keys")
+                            .font(.system(size: 10))
+                            .foregroundColor(.red)
+                    } else if let selectedId = selectedApiKeyId,
+                              let currentKey = providerConfig.apiKeys.first(where: { $0.id == selectedId }) {
+                        Text(currentKey.name)
+                            .font(.system(size: 10))
+                            .foregroundColor(.blue)
+                    } else {
+                        Text("\(providerConfig.apiKeys.count) key\(providerConfig.apiKeys.count > 1 ? "s" : "")")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                // 当前 provider 指示器
+                if isCurrent {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 6, height: 6)
+                }
+
+                // 子菜单指示器
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
             }
-            .contentShape(Rectangle())
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
+        .menuStyle(.borderlessButton)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func openSettings() {
+        NSApp.sendAction(#selector(NSApplication.orderFrontStandardAboutPanel(_:)), to: nil, from: nil)
     }
 }
 
 #Preview {
     ProviderListView()
+        .preferredColorScheme(.dark)
 }

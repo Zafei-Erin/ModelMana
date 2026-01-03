@@ -8,17 +8,23 @@
 import Foundation
 
 enum Provider: String, CaseIterable, Identifiable {
-    case zhipu = "智谱 AI"
-    case openai = "OpenAI"
+    case zhipu = "Zhipu"
+    case claude = "Claude"
 
-    var id: String { rawValue }
+    // 使用固定 id，不随显示名称变化
+    var id: String {
+        switch self {
+        case .zhipu: return "zhipu"
+        case .claude: return "claude"
+        }
+    }
 
     var baseURL: String {
         switch self {
         case .zhipu:
             return "https://open.bigmodel.cn/api/anthropic"
-        case .openai:
-            return "https://api.openai.com/v1"
+        case .claude:
+            return "https://api.anthropic.com"
         }
     }
 
@@ -26,8 +32,8 @@ enum Provider: String, CaseIterable, Identifiable {
         switch self {
         case .zhipu:
             return "ZHIPU_API_KEY"
-        case .openai:
-            return "OPENAI_API_KEY"
+        case .claude:
+            return "CLAUDE_API_KEY"
         }
     }
 }

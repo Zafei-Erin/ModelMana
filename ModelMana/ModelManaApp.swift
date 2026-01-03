@@ -18,6 +18,6 @@ struct ModelManaApp: App {
             SettingsWindowView()
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 400, height: 350)
+        .defaultSize(width: 420, height: 380)
     }
 }
