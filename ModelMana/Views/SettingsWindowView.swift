@@ -20,19 +20,8 @@ struct SettingsWindowView: View {
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundColor(Color(nsColor: .controlTextColor))
-                Spacer()
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                        .symbolRenderingMode(.hierarchical)
-                }
-                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.bottom, 12)
 
             Divider()
 
@@ -57,33 +46,17 @@ struct SettingsWindowView: View {
                         .foregroundColor(.blue)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(Color.blue.opacity(0.5), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .buttonStyle(.plain)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(Color.blue.opacity(0.5), lineWidth: 1)
-                            .background(Color(nsColor: .controlBackgroundColor))
-                    )
                 }
                 .padding(16)
             }
-
-            Divider()
-
-            // 保存按钮
-            HStack(spacing: 10) {
-                Button(action: {
-                    dismiss()
-                }) {
-                    Text("Done")
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
-            .padding(16)
         }
         .frame(width: 500, height: 550)
         .sheet(isPresented: $showingAddProvider) {
@@ -110,6 +83,8 @@ struct ProviderSettingsCard: View {
     @State private var showingAddKey = false
     @State private var showingEditProvider = false
     @State private var showingDeleteAlert = false
+    @State private var showingEditKey = false
+    @State private var editingKey: ApiKeyConfig?
     @Environment(\.dismiss) private var dismiss
     private var appState = AppState.shared
 
@@ -192,6 +167,9 @@ struct ProviderSettingsCard: View {
                         },
                         onDelete: {
                             deleteKey(keyConfig.id)
+                        },
+                        onEdit: {
+                            editKey(keyConfig)
                         }
                     )
                 }
@@ -251,6 +229,28 @@ struct ProviderSettingsCard: View {
         } message: {
             Text("Are you sure you want to delete \"\(provider.name)\"? This action cannot be undone.")
         }
+        .sheet(isPresented: $showingEditKey) {
+            if let key = editingKey {
+                EditKeySheet(keyConfig: key) { updatedName, updatedKey in
+                    updateKey(keyId: key.id, name: updatedName, keyValue: updatedKey)
+                }
+            }
+        }
+    }
+
+    private func editKey(_ keyConfig: ApiKeyConfig) {
+        editingKey = keyConfig
+        showingEditKey = true
+    }
+
+    private func updateKey(keyId: String, name: String, keyValue: String) {
+        guard let index = apiKeys.firstIndex(where: { $0.id == keyId }) else { return }
+        apiKeys[index] = ApiKeyConfig(id: keyId, name: name, key: keyValue)
+        var newConfig = appState.configuration
+        guard let providerIndex = newConfig.providers.firstIndex(where: { $0.id == provider.id }) else { return }
+        newConfig.providers[providerIndex].apiKeys = apiKeys
+        appState.configuration = newConfig
+        try? ConfigService.saveConfiguration(appState.configuration)
     }
 
     private var isPresetProvider: (String) -> Bool {
@@ -313,35 +313,58 @@ struct ApiKeyRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     let onDelete: () -> Void
+    let onEdit: () -> Void
+
+    @State private var isRevealed = false
 
     var body: some View {
         HStack(spacing: 8) {
-            // 选中指示器
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 14))
-                .foregroundColor(isSelected ? .blue : .secondary)
-
-            // Key 名称和遮罩
-            VStack(alignment: .leading, spacing: 2) {
-                Text(keyConfig.name)
-                    .font(.caption)
-                    .foregroundColor(.primary)
-                Text(keyConfig.maskedKey)
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundColor(.secondary)
+            // 选中指示器（可点击）
+            Button(action: onSelect) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 14))
+                    .foregroundColor(isSelected ? .blue : .secondary)
             }
+            .buttonStyle(.plain)
 
-            Spacer()
-
-            // 选择按钮
-            if !isSelected {
-                Button(action: onSelect) {
-                    Text("Select")
+            // Key 名称和遮罩/完整 key（可点击）
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(keyConfig.name)
                         .font(.caption)
-                        .foregroundColor(.blue)
+                        .foregroundColor(.primary)
+                    if isRevealed {
+                        Text(keyConfig.key)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.primary)
+                            .textSelection(.enabled)
+                    } else {
+                        Text(keyConfig.maskedKey)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .buttonStyle(.plain)
+
+            // View 按钮（切换显示）
+            Button(action: {
+                isRevealed.toggle()
+            }) {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+                    .font(.system(size: 11))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
+
+            // Edit 按钮
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 11))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
 
             // 删除按钮
             Button(action: onDelete) {
@@ -425,30 +448,22 @@ struct AddProviderSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                Text("Add New Provider")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
+            Text("Add New Provider")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.top, .leading, .trailing], 16)
+                .padding(.bottom, 12)
 
             Divider()
 
-            // 表单
+            // 表单内容
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Provider Name")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    TextField("e.g., OpenAI, Gemini", text: $name)
+                    TextField("e.g., UniApi, Localhost", text: $name)
                         .textFieldStyle(.roundedBorder)
                 }
 
@@ -461,31 +476,33 @@ struct AddProviderSheet: View {
                 }
 
                 Spacer()
-
-                // 按钮
-                HStack(spacing: 10) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button("Add Provider") {
-                        let newProvider = ProviderConfig(
-                            id: UUID().uuidString,
-                            name: name,
-                            baseUrl: baseUrl,
-                            apiKeys: []
-                        )
-                        onSave(newProvider)
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(name.isEmpty || baseUrl.isEmpty)
-                }
             }
             .padding()
+
+            // 按钮
+            HStack(spacing: 10) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Add Provider") {
+                    let newProvider = ProviderConfig(
+                        id: UUID().uuidString,
+                        name: name,
+                        baseUrl: baseUrl,
+                        apiKeys: []
+                    )
+                    onSave(newProvider)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(name.isEmpty || baseUrl.isEmpty)
+            }
+            .padding()
+            .padding(.top, 8)
         }
-        .frame(width: 350, height: 220)
+        .frame(width: 350)
     }
 }
 
@@ -507,24 +524,16 @@ struct EditProviderSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                Text("Edit Provider")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
+            Text("Edit Provider")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.top, .leading, .trailing], 16)
+                .padding(.bottom, 12)
 
             Divider()
 
-            // 表单
+            // 表单内容
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Provider Name")
@@ -543,31 +552,119 @@ struct EditProviderSheet: View {
                 }
 
                 Spacer()
-
-                // 按钮
-                HStack(spacing: 10) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button("Save") {
-                        let updated = ProviderConfig(
-                            id: provider.id,
-                            name: name,
-                            baseUrl: baseUrl,
-                            apiKeys: provider.apiKeys
-                        )
-                        onSave(updated)
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(name.isEmpty || baseUrl.isEmpty)
-                }
             }
             .padding()
+
+            // 按钮
+            HStack(spacing: 10) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Save") {
+                    let updated = ProviderConfig(
+                        id: provider.id,
+                        name: name,
+                        baseUrl: baseUrl,
+                        apiKeys: provider.apiKeys
+                    )
+                    onSave(updated)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(name.isEmpty || baseUrl.isEmpty)
+            }
+            .padding()
+            .padding(.top, 8)
         }
-        .frame(width: 350, height: 220)
+        .frame(width: 350)
+    }
+}
+
+// 编辑 API Key 弹窗
+struct EditKeySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let keyConfig: ApiKeyConfig
+    let onSave: (String, String) -> Void
+
+    @State private var name: String
+    @State private var key: String
+    @State private var isRevealed = false
+
+    init(keyConfig: ApiKeyConfig, onSave: @escaping (String, String) -> Void) {
+        self.keyConfig = keyConfig
+        self.onSave = onSave
+        self._name = State(initialValue: keyConfig.name)
+        self._key = State(initialValue: keyConfig.key)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            Text("Edit API Key")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.top, .leading, .trailing], 16)
+                .padding(.bottom, 12)
+
+            Divider()
+
+            // 表单内容
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Name")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TextField("Key name", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("API Key")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    HStack {
+                        if isRevealed {
+                            TextField("sk-...", text: $key)
+                                .textFieldStyle(.roundedBorder)
+                        } else {
+                            SecureField("sk-...", text: $key)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        Button(action: {
+                            isRevealed.toggle()
+                        }) {
+                            Image(systemName: isRevealed ? "eye.slash" : "eye")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding()
+
+            // 按钮
+            HStack(spacing: 10) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Save") {
+                    onSave(name, key)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(name.isEmpty || key.isEmpty)
+            }
+            .padding()
+            .padding(.top, 8)
+        }
+        .frame(width: 350)
     }
 }
 
