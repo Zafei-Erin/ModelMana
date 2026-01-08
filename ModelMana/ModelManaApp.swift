@@ -13,6 +13,7 @@ struct ModelManaApp: App {
         MenuBarExtra("ModelMana", systemImage: "circle.fill") {
             ProviderListView()
         }
+        .menuBarExtraStyle(.window)
 
         Window("Provider Settings", id: "settings") {
             SettingsWindowView()
