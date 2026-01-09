@@ -188,12 +188,11 @@ struct ProviderListView: View {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.level = .popUpMenu
-        panel.hasShadow = false
+        panel.hasShadow = true
 
         let contentView = NSHostingView(
             rootView: ApiKeyDropdownPanel(
                 provider: provider,
-                selectedApiKeyId: config.selectedApiKeyId,
                 onSelectApiKey: { apiKeyId in
                     selectApiKey(providerConfig: provider, apiKeyId: apiKeyId)
                 }
@@ -251,12 +250,12 @@ struct ActiveKeySection: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(providerName) - \(apiKeyName)")
-                    .font(.system(size: 14))
+                    .font(.system(size: 12))
                     .fontWeight(.semibold)
 
                 HStack(spacing: 8) {
                     ProgressView(value: 0.7, total: 1.0)
-                        .progressViewStyle(.linear)
+                        .progressViewStyle(BlackProgressStyle())
                     Text("70%")
                 }
             }
@@ -293,7 +292,7 @@ struct ProviderButton: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
+        HoverButton(action: onTap) {
             HStack(spacing: 12) {
                 ProviderIcon(providerId: providerConfig.id, size: 12)
                 Text(providerConfig.name)
@@ -304,18 +303,21 @@ struct ProviderButton: View {
                     .foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
     }
 }
 
 // API Key 下拉面板
 struct ApiKeyDropdownPanel: View {
     let provider: ProviderConfig
-    let selectedApiKeyId: String?
     let onSelectApiKey: (String) -> Void
+
+    // 直接从 AppState 读取当前选中的 API Key ID
+    private var selectedApiKeyId: String? {
+        AppState.shared.configuration.selectedApiKeyId
+    }
 
     var body: some View {
         panelContent
@@ -328,21 +330,15 @@ struct ApiKeyDropdownPanel: View {
     private var panelContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider()
             keyList
         }
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            ProviderIcon(providerId: provider.id, size: 14)
-            Text(provider.name)
-                .font(.system(size: 12, weight: .semibold))
-            Spacer()
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
+        Text(provider.name)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
     }
 
     private var keyList: some View {
@@ -350,8 +346,12 @@ struct ApiKeyDropdownPanel: View {
             if provider.apiKeys.isEmpty {
                 emptyState
             } else {
-                ForEach(provider.apiKeys) { key in
+                ForEach(Array(provider.apiKeys.enumerated()), id: \.element.id) { index, key in
                     keyButton(for: key)
+                    if index < provider.apiKeys.count - 1 {
+                        Divider()
+                            .padding(.horizontal, 6)
+                    }
                 }
             }
         }
@@ -366,25 +366,38 @@ struct ApiKeyDropdownPanel: View {
     }
 
     private func keyButton(for key: ApiKeyConfig) -> some View {
-        Button {
-            onSelectApiKey(key.id)
-        } label: {
+        HoverButton(
+            isSelected: key.id == selectedApiKeyId,
+            action: {
+                onSelectApiKey(key.id)
+            }
+        ) {
             keyLabel(for: key)
         }
-        .buttonStyle(.plain)
     }
 
     private func keyLabel(for key: ApiKeyConfig) -> some View {
-        HStack(spacing: 8) {
-            keyIcon(for: key)
-            Text(key.name)
-                .font(.system(size: 12))
-            Spacer()
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                keyIcon(for: key)
+                Text(key.name)
+                    .font(.system(size: 13, weight: .semibold))
+
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                ProgressView(value: 0.7, total: 1.0)
+                    .progressViewStyle(BlackProgressStyle())
+                Text("70%")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.leading, 24)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(key.id == selectedApiKeyId ? Color.accentColor.opacity(0.1) : Color.clear)
     }
 
     private func keyIcon(for key: ApiKeyConfig) -> some View {
@@ -394,6 +407,75 @@ struct ApiKeyDropdownPanel: View {
         return Image(systemName: iconName)
             .font(.system(size: 14))
             .foregroundStyle(style)
+    }
+}
+
+// 自定义带 hover 效果的按钮包装器
+struct HoverButton<Content: View>: View {
+    var isSelected: Bool = false
+    var action: () -> Void
+    @ViewBuilder var content: () -> Content
+
+    @State private var isHovering = false
+    @State private var isPressing = false
+
+    var body: some View {
+        Button(action: action) {
+            content()
+                .background(backgroundForState)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .onPressGesture { pressing in
+            isPressing = pressing
+        }
+    }
+
+    private var backgroundForState: Color {
+        if isPressing {
+            return Color.gray.opacity(0.15)
+        } else if isHovering {
+            return Color.gray.opacity(0.1)
+        }
+        return Color.clear
+    }
+}
+
+// 按压手势扩展
+extension View {
+    func onPressGesture(change: @escaping (Bool) -> Void) -> some View {
+        self.simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    change(true)
+                }
+                .onEnded { _ in
+                    change(false)
+                }
+        )
+    }
+}
+
+// 自定义黑色进度条样式
+struct BlackProgressStyle: ProgressViewStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(spacing: 0) {
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // 背景条
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.gray.opacity(0.2))
+
+                    // 进度条
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.black)
+                        .frame(width: geometry.size.width * (configuration.fractionCompleted ?? 0))
+                }
+            }
+            .frame(height: 4)
+        }
     }
 }
 
