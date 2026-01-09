@@ -5,12 +5,22 @@
 //  Created by Zafei on 2/1/26.
 //
 
+import AppKit
 import SwiftUI
+
+struct ButtonFrameKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
 
 struct ProviderListView: View {
     @Environment(\.openWindow) private var openWindow
-    @State private var showingApiKeyPopover: Bool = false
-    @State private var selectedProviderForKeys: ProviderConfig?
+    @State private var dropdownProvider: ProviderConfig?
+    @State private var dropdownWindow: NSPanel?
+    @State private var providerButtonFrames: [String: CGRect] = [:]
+    @State private var eventMonitor: Any?
 
     // 动态计算当前 provider
     private var currentProviderConfig: ProviderConfig? {
@@ -43,7 +53,6 @@ struct ProviderListView: View {
 
                 }
                 .buttonStyle(.plain)
-
             }
 
             Divider().padding(.vertical, 6)
@@ -58,7 +67,9 @@ struct ProviderListView: View {
                     ActiveKeySection(
                         providerId: current.id,
                         providerName: current.name,
-                        apiKeyName: current.apiKeys.first(where: { $0.id == config.selectedApiKeyId })?.name ?? "Default"
+                        apiKeyName: current.apiKeys.first(where: {
+                            $0.id == config.selectedApiKeyId
+                        })?.name ?? "Default"
                     ).padding(.horizontal, 2)
                 }
             }
@@ -71,25 +82,25 @@ struct ProviderListView: View {
                     .font(.system(size: 12))
                     .padding(.bottom, 8)
 
-                VStack(spacing: 6) {
-                    ForEach(config.providers) { provider in
-                        ProviderButton(providerConfig: provider)
-                            .onTapGesture {
-                                selectedProviderForKeys = provider
-                                showingApiKeyPopover = true
+                // Provider 列表
+                VStack(spacing: 0) {
+                    ForEach(Array(config.providers.enumerated()), id: \.element.id) {
+                        index, provider in
+                        ProviderButton(
+                            providerConfig: provider,
+                            onTap: {
+                                toggleDropdown(for: provider)
                             }
-                            .popover(isPresented: $showingApiKeyPopover) {
-                                if let provider = selectedProviderForKeys {
-                                    ApiKeySelectionPopover(
-                                        provider: provider,
-                                        selectedApiKeyId: config.selectedApiKeyId,
-                                        onSelectApiKey: { apiKeyId in
-                                            selectApiKey(providerConfig: provider, apiKeyId: apiKeyId)
-                                            showingApiKeyPopover = false
-                                        }
-                                    )
-                                }
+                        )
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: ButtonFrameKey.self,
+                                    value: [provider.id: geo.frame(in: .global)]
+                                )
                             }
+                        )
+                        .padding(.bottom, index < config.providers.count - 1 ? 6 : 0)
                     }
                 }
             }
@@ -108,13 +119,24 @@ struct ProviderListView: View {
             .buttonStyle(.plain)
         }
         .padding(10)
+        .frame(width: 230)
+        .onPreferenceChange(ButtonFrameKey.self) { frames in
+            providerButtonFrames = frames
+        }
+        .onDisappear {
+            hideDropdown()
+        }
     }
 
     private func getCurrentProviderBaseURL() -> String? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json")),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let env = json["env"] as? [String: Any],
-              let baseURL = env["ANTHROPIC_BASE_URL"] as? String else {
+        guard
+            let data = try? Data(
+                contentsOf: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(
+                    ".claude/settings.json")),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let env = json["env"] as? [String: Any],
+            let baseURL = env["ANTHROPIC_BASE_URL"] as? String
+        else {
             return nil
         }
         return baseURL
@@ -139,6 +161,82 @@ struct ProviderListView: View {
         } catch {
             print("[ModelMana] ERROR: \(error.localizedDescription)")
         }
+    }
+
+    private func toggleDropdown(for provider: ProviderConfig) {
+        if dropdownProvider?.id == provider.id {
+            hideDropdown()
+        } else {
+            showDropdown(for: provider)
+        }
+    }
+
+    private func showDropdown(for provider: ProviderConfig) {
+        hideDropdown()
+
+        dropdownProvider = provider
+
+        let config = AppState.shared.configuration
+
+        // Create NSPanel
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 200),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.level = .popUpMenu
+        panel.hasShadow = false
+
+        let contentView = NSHostingView(
+            rootView: ApiKeyDropdownPanel(
+                provider: provider,
+                selectedApiKeyId: config.selectedApiKeyId,
+                onSelectApiKey: { apiKeyId in
+                    selectApiKey(providerConfig: provider, apiKeyId: apiKeyId)
+                }
+            ))
+        panel.contentView = contentView
+
+        // Position window
+        if let buttonFrame = providerButtonFrames[provider.id],
+            let window = NSApp.keyWindow
+        {
+            // Convert window coordinates to screen coordinates
+            let windowOrigin = window.convertPoint(
+                toScreen: NSPoint(x: buttonFrame.minX, y: window.frame.height - buttonFrame.maxY))
+            let x = windowOrigin.x + 230 - 10
+            let y = windowOrigin.y - 168
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        // Click outside to close
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard let window = dropdownWindow else { return event }
+            // Check if click is inside the panel
+            if window.frame.contains(NSEvent.mouseLocation) {
+                // Click is inside panel, don't close
+                return event
+            }
+            // Click is outside, close the dropdown
+            hideDropdown()
+            return event
+        }
+
+        panel.orderFront(nil)
+        dropdownWindow = panel
+    }
+
+    private func hideDropdown() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+        dropdownProvider = nil
+        dropdownWindow?.close()
+        dropdownWindow = nil
     }
 }
 
@@ -185,67 +283,117 @@ struct ProviderIcon: View {
         } else {
             Image(systemName: "server.rack")
                 .font(.system(size: size))
-                .foregroundStyle(.secondary)
         }
     }
 }
 
-// Provider Button (点击后弹出 Popover 选择 API Key)
+// Provider 按钮
 struct ProviderButton: View {
     let providerConfig: ProviderConfig
+    let onTap: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Provider Icon
-            ProviderIcon(providerId: providerConfig.id, size: 12)
-            Text(providerConfig.name)
-                .font(.system(size: 12))
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                ProviderIcon(providerId: providerConfig.id, size: 12)
+                Text(providerConfig.name)
+                    .font(.system(size: 12))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 }
 
-// API Key Selection Popover
-struct ApiKeySelectionPopover: View {
+// API Key 下拉面板
+struct ApiKeyDropdownPanel: View {
     let provider: ProviderConfig
     let selectedApiKeyId: String?
     let onSelectApiKey: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("\(provider.name) Keys")
-                .font(.system(size: 12))
-                .padding(.bottom, 8)
+        panelContent
+            .frame(width: 220)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+    }
 
+    private var panelContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
+            keyList
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            ProviderIcon(providerId: provider.id, size: 14)
+            Text(provider.name)
+                .font(.system(size: 12, weight: .semibold))
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var keyList: some View {
+        VStack(spacing: 0) {
             if provider.apiKeys.isEmpty {
-                Text("No API keys")
-                    .foregroundStyle(.secondary)
-                    .padding()
+                emptyState
             } else {
                 ForEach(provider.apiKeys) { key in
-                    Button {
-                        onSelectApiKey(key.id)
-                    } label: {
-                        HStack {
-                            Image(systemName: key.id == selectedApiKeyId ? "checkmark" : "circle")
-                                .frame(width: 16)
-                            Text(key.name)
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    keyButton(for: key)
                 }
             }
         }
-        .frame(width: 250)
-        .padding(5)
+    }
+
+    private var emptyState: some View {
+        Text("No API keys")
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+    }
+
+    private func keyButton(for key: ApiKeyConfig) -> some View {
+        Button {
+            onSelectApiKey(key.id)
+        } label: {
+            keyLabel(for: key)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func keyLabel(for key: ApiKeyConfig) -> some View {
+        HStack(spacing: 8) {
+            keyIcon(for: key)
+            Text(key.name)
+                .font(.system(size: 12))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(key.id == selectedApiKeyId ? Color.accentColor.opacity(0.1) : Color.clear)
+    }
+
+    private func keyIcon(for key: ApiKeyConfig) -> some View {
+        let isSelected = key.id == selectedApiKeyId
+        let iconName = isSelected ? "checkmark.circle.fill" : "circle"
+        let style: any ShapeStyle = isSelected ? Color.accentColor : Color.secondary
+        return Image(systemName: iconName)
+            .font(.system(size: 14))
+            .foregroundStyle(style)
     }
 }
 
