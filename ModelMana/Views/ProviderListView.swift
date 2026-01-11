@@ -69,7 +69,8 @@ struct ProviderListView: View {
                         providerName: current.name,
                         apiKeyName: current.apiKeys.first(where: {
                             $0.id == config.selectedApiKeyId
-                        })?.name ?? "Default"
+                        })?.name ?? "Default",
+                        apiKeyId: config.selectedApiKeyId
                     ).padding(.horizontal, 2)
                 }
             }
@@ -176,8 +177,6 @@ struct ProviderListView: View {
 
         dropdownProvider = provider
 
-        let config = AppState.shared.configuration
-
         // Create NSPanel
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 220, height: 200),
@@ -243,6 +242,7 @@ struct ActiveKeySection: View {
     let providerId: String
     let providerName: String
     let apiKeyName: String
+    let apiKeyId: String?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -253,14 +253,52 @@ struct ActiveKeySection: View {
                     .font(.system(size: 12))
                     .fontWeight(.semibold)
 
-                HStack(spacing: 8) {
-                    ProgressView(value: 0.7, total: 1.0)
-                        .progressViewStyle(BlackProgressStyle())
-                    Text("70%")
-                }
+                quotaProgressView(for: apiKeyId)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func quotaProgressView(for apiKeyId: String?) -> some View {
+        if let apiKeyId {
+            let quota = AppState.shared.getQuota(for: apiKeyId)
+
+            switch quota.status {
+            case .loading:
+                ProgressView()
+                    .scaleEffect(0.3)
+
+            case .success(let percentage, _):
+                VStack(spacing: 2) {
+                    HStack(spacing: 8) {
+                        ProgressView(value: percentage / 100, total: 1.0)
+                            .progressViewStyle(BlackProgressStyle())
+
+                        Text("\(Int(percentage))%")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let resetText = quota.resetTimeText {
+                        Text(resetText)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+
+            case .error:
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+                    Text("failed to fetch")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
     }
 }
 
@@ -386,27 +424,60 @@ struct ApiKeyDropdownPanel: View {
                 Spacer()
             }
 
-            HStack(spacing: 8) {
-                ProgressView(value: 0.7, total: 1.0)
-                    .progressViewStyle(BlackProgressStyle())
-                Text("70%")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.leading, 24)
+            quotaProgressView(for: key)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
     }
 
+    @ViewBuilder
+    private func quotaProgressView(for key: ApiKeyConfig) -> some View {
+        let quota = AppState.shared.getQuota(for: key.id)
+
+        VStack(alignment: .leading, spacing: 2) {
+            switch quota.status {
+            case .loading:
+                ProgressView()
+                    .scaleEffect(0.3)
+
+            case .success(let percentage, _):
+                HStack(spacing: 6) {
+                    ProgressView(value: percentage / 100, total: 1.0)
+                        .progressViewStyle(BlackProgressStyle())
+
+                    Text("\(Int(percentage))%")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let resetText = quota.resetTimeText {
+                    Text(resetText)
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+
+            case .error:
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.red)
+                    Text("failed to fetch")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .padding(.leading, 24)
+    }
+
     private func keyIcon(for key: ApiKeyConfig) -> some View {
         let isSelected = key.id == selectedApiKeyId
         let iconName = isSelected ? "checkmark.circle.fill" : "circle"
-        let style: any ShapeStyle = isSelected ? Color.accentColor : Color.secondary
         return Image(systemName: iconName)
             .font(.system(size: 14))
-            .foregroundStyle(style)
+            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
     }
 }
 

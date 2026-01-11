@@ -49,6 +49,41 @@ struct ProviderConfig: Codable, Identifiable {
     }
 }
 
+/// API Key 配额信息
+struct ApiKeyQuota {
+    enum Status {
+        case loading
+        case success(percentage: Double, nextResetTime: TimeInterval)
+        case error(String)
+    }
+
+    var status: Status
+    var lastUpdated: Date
+
+    init(status: Status, lastUpdated: Date = Date()) {
+        self.status = status
+        self.lastUpdated = lastUpdated
+    }
+
+    // 格式化重置时间显示
+    var resetTimeText: String? {
+        guard case .success(_, let nextResetTime) = status else { return nil }
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.allowedUnits = [.hour, .minute]
+        let time = formatter.string(from: Date(), to: Date(timeIntervalSince1970: nextResetTime / 1000)) ?? ""
+        return "resets in " + time
+    }
+
+    // 获取百分比（如果可用）
+    var percentage: Double? {
+        if case .success(let percentage, _) = status {
+            return percentage
+        }
+        return nil
+    }
+}
+
 /// 应用配置
 struct AppConfiguration: Codable {
     var providers: [ProviderConfig]

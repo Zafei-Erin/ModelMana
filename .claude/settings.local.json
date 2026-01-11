@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xcodebuild build:*)"
+      "Bash(xcodebuild build:*)",
+      "Bash(find:*)",
+      "Bash(xcodebuild:*)"
     ]
   }
 }
