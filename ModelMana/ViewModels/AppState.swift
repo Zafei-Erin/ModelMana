@@ -40,6 +40,13 @@ class AppState {
         apiKeyQuotas[apiKeyId]!  // 一定存在，因为已预初始化
     }
 
+    /// 注册新的 API Key（添加时调用）
+    func registerApiKey(_ apiKeyId: String) {
+        if apiKeyQuotas[apiKeyId] == nil {
+            apiKeyQuotas[apiKeyId] = ApiKeyQuota(status: .error("failed to fetch"))
+        }
+    }
+
     /// 查询单个 Zhipu API Key 的配额
     func fetchZhipuQuota(apiKey: String, apiKeyId: String) {
         // 先设置为 loading 状态

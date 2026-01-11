@@ -12,6 +12,33 @@ struct SettingsWindowView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingAddProvider = false
 
+    private let presetProviderIds = ["zhipu", "claude", "minimax"]
+
+    private var presetProviders: [ProviderConfig] {
+        presetProviderIds.compactMap { id in
+            // 如果配置中存在，使用配置的（含 API keys）
+            if let existing = appState.configuration.providers.first(where: { $0.id == id }) {
+                return existing
+            }
+            // 从 Provider enum 获取默认配置
+            if let provider = Provider.allCases.first(where: { $0.id == id }) {
+                return ProviderConfig(
+                    id: provider.id,
+                    name: provider.rawValue,
+                    baseUrl: provider.baseURL,
+                    apiKeys: []
+                )
+            }
+            return nil
+        }
+    }
+
+    private var customProviders: [ProviderConfig] {
+        appState.configuration.providers.filter { provider in
+            !presetProviderIds.contains(provider.id)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -28,8 +55,27 @@ struct SettingsWindowView: View {
             // Provider 列表
             ScrollView {
                 VStack(spacing: 12) {
-                    ForEach(appState.configuration.providers) { provider in
+                    // Built-in Providers 分组
+                    Text("Preset Providers")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    ForEach(presetProviders) { provider in
                         ProviderSettingsCard(provider: provider)
+                    }
+
+                    // Custom Providers 分组
+                    if !customProviders.isEmpty {
+                        Text("Custom Providers")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+
+                        ForEach(customProviders) { provider in
+                            ProviderSettingsCard(provider: provider)
+                        }
                     }
 
                     // 添加新 Provider 按钮
@@ -222,12 +268,14 @@ struct ProviderSettingsCard: View {
             }
         }
         .alert("Delete Provider", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
                 deleteProvider()
             }
         } message: {
-            Text("Are you sure you want to delete \"\(provider.name)\"? This action cannot be undone.")
+            Text(
+                "Are you sure you want to delete \"\(provider.name)\"? This action cannot be undone."
+            )
         }
         .sheet(isPresented: $showingEditKey) {
             if let key = editingKey {
@@ -247,20 +295,69 @@ struct ProviderSettingsCard: View {
         guard let index = apiKeys.firstIndex(where: { $0.id == keyId }) else { return }
         apiKeys[index] = ApiKeyConfig(id: keyId, name: name, key: keyValue)
         var newConfig = appState.configuration
-        guard let providerIndex = newConfig.providers.firstIndex(where: { $0.id == provider.id }) else { return }
-        newConfig.providers[providerIndex].apiKeys = apiKeys
+        if let providerIndex = newConfig.providers.firstIndex(where: { $0.id == provider.id }) {
+            newConfig.providers[providerIndex].apiKeys = apiKeys
+        } else {
+            // Provider 不在配置中（preset provider 首次添加 key），先添加到配置
+            newConfig.providers.append(
+                ProviderConfig(
+                    id: provider.id,
+                    name: provider.name,
+                    baseUrl: provider.baseUrl,
+                    apiKeys: apiKeys
+                ))
+        }
         appState.configuration = newConfig
         try? ConfigService.saveConfiguration(appState.configuration)
+
+        // 如果更新的是当前选中的key，同步到Claude settings
+        if keyId == appState.configuration.selectedApiKeyId {
+            updateClaudeSettingsIfNeeded()
+        }
+    }
+
+    private func updateClaudeSettingsIfNeeded() {
+        // 获取当前选中的provider和API key
+        guard let selectedApiKeyId = appState.configuration.selectedApiKeyId,
+            let selectedProviderId = appState.configuration.selectedProviderId,
+            let providerConfig = appState.configuration.providers.first(where: {
+                $0.id == selectedProviderId
+            }),
+            let apiKeyConfig = providerConfig.apiKeys.first(where: { $0.id == selectedApiKeyId })
+        else { return }
+
+        // 同步更新Claude settings
+        do {
+            try SettingsFileService.writeSettings(
+                baseUrl: providerConfig.baseUrl,
+                apiKey: apiKeyConfig.key
+            )
+            print("[ModelMana] ✅ Synced updated API key to Claude settings")
+        } catch {
+            print(
+                "[ModelMana] ❌ WARNING: Failed to sync Claude settings: \(error.localizedDescription)"
+            )
+        }
     }
 
     private var isPresetProvider: (String) -> Bool {
-        { id in ["zhipu", "claude"].contains(id) }
+        { id in ["zhipu", "claude", "minimax"].contains(id) }
     }
 
     private func selectKey(_ id: String) {
-        guard let index = appState.configuration.providers.firstIndex(where: { $0.id == provider.id }) else { return }
         var newConfig = appState.configuration
-        newConfig.providers[index].apiKeys = apiKeys
+        if let providerIndex = newConfig.providers.firstIndex(where: { $0.id == provider.id }) {
+            newConfig.providers[providerIndex].apiKeys = apiKeys
+        } else {
+            // Provider 不在配置中（preset provider 首次选择），先添加到配置
+            newConfig.providers.append(
+                ProviderConfig(
+                    id: provider.id,
+                    name: provider.name,
+                    baseUrl: provider.baseUrl,
+                    apiKeys: apiKeys
+                ))
+        }
         newConfig.selectedProviderId = provider.id
         newConfig.selectedApiKeyId = id
         appState.configuration = newConfig
@@ -270,25 +367,49 @@ struct ProviderSettingsCard: View {
     private func deleteKey(_ id: String) {
         apiKeys.removeAll { $0.id == id }
         var newConfig = appState.configuration
-        guard let index = newConfig.providers.firstIndex(where: { $0.id == provider.id }) else { return }
-        newConfig.providers[index].apiKeys = apiKeys
+        if let providerIndex = newConfig.providers.firstIndex(where: { $0.id == provider.id }) {
+            newConfig.providers[providerIndex].apiKeys = apiKeys
+        } else {
+            // Provider 不在配置中（preset provider 首次删除 key），先添加到配置
+            newConfig.providers.append(
+                ProviderConfig(
+                    id: provider.id,
+                    name: provider.name,
+                    baseUrl: provider.baseUrl,
+                    apiKeys: apiKeys
+                ))
+        }
         appState.configuration = newConfig
         try? ConfigService.saveConfiguration(appState.configuration)
     }
 
     private func addKey() {
-        let newKey = ApiKeyConfig(name: newKeyName.isEmpty ? "Key \(apiKeys.count + 1)" : newKeyName, key: newKeyValue)
+        let newKey = ApiKeyConfig(
+            name: newKeyName.isEmpty ? "Key \(apiKeys.count + 1)" : newKeyName, key: newKeyValue)
         apiKeys.append(newKey)
         var newConfig = appState.configuration
-        guard let index = newConfig.providers.firstIndex(where: { $0.id == provider.id }) else { return }
-        newConfig.providers[index].apiKeys = apiKeys
+        if let providerIndex = newConfig.providers.firstIndex(where: { $0.id == provider.id }) {
+            newConfig.providers[providerIndex].apiKeys = apiKeys
+        } else {
+            // Provider 不在配置中（preset provider 首次添加 key），先添加到配置
+            newConfig.providers.append(
+                ProviderConfig(
+                    id: provider.id,
+                    name: provider.name,
+                    baseUrl: provider.baseUrl,
+                    apiKeys: apiKeys
+                ))
+        }
         appState.configuration = newConfig
         try? ConfigService.saveConfiguration(appState.configuration)
+        appState.registerApiKey(newKey.id)
     }
 
     private func updateProvider(_ updated: ProviderConfig) {
         var newConfig = appState.configuration
-        guard let index = newConfig.providers.firstIndex(where: { $0.id == provider.id }) else { return }
+        guard let index = newConfig.providers.firstIndex(where: { $0.id == provider.id }) else {
+            return
+        }
         newConfig.providers[index] = updated
         appState.configuration = newConfig
         try? ConfigService.saveConfiguration(appState.configuration)

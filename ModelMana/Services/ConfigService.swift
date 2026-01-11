@@ -71,6 +71,13 @@ struct ConfigService {
                 name: "Claude",
                 baseUrl: "https://api.anthropic.com",
                 apiKeys: []
+            ),
+            // Minimax
+            ProviderConfig(
+                id: "minimax",
+                name: "Minimax",
+                baseUrl: "https://api.minimaxi.com/anthropic",
+                apiKeys: []
             )
         ]
 
