@@ -59,8 +59,10 @@ struct ZhipuQuotaService {
                    type == "TOKENS_LIMIT",
                    let unit = limit["unit"] as? Int,
                    unit == 3,
-                   let percentage = limit["percentage"] as? Double,
-                   let nextResetTime = limit["nextResetTime"] as? TimeInterval {
+                   let percentage = limit["percentage"] as? Double {
+                    // nextResetTime 可选，如果不存在则默认 5 小时后（毫秒时间戳）
+                    let nextResetTime = (limit["nextResetTime"] as? TimeInterval)
+                        ?? (Date().addingTimeInterval(5 * 3600).timeIntervalSince1970 * 1000)
                     print("[ZhipuQuota] 成功获取配额: \(percentage)%")
                     return .success((percentage: percentage, nextResetTime: nextResetTime))
                 }
@@ -132,8 +134,10 @@ struct ZhipuQuotaService {
                        type == "TOKENS_LIMIT",
                        let unit = limit["unit"] as? Int,
                        unit == 3,
-                       let percentage = limit["percentage"] as? Double,
-                       let nextResetTime = limit["nextResetTime"] as? TimeInterval {
+                       let percentage = limit["percentage"] as? Double {
+                        // nextResetTime 可选，如果不存在则默认 5 小时后（毫秒时间戳）
+                        let nextResetTime = (limit["nextResetTime"] as? TimeInterval)
+                            ?? (Date().addingTimeInterval(5 * 3600).timeIntervalSince1970 * 1000)
                         print("[ZhipuQuota] 成功获取配额: \(percentage)%")
                         completion(.success((percentage: percentage, nextResetTime: nextResetTime)))
                         return

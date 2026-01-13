@@ -40,6 +40,11 @@ struct SettingsFileService {
             .appendingPathComponent(settingsFileName)
     }
 
+    private static var claudeJsonPath: URL {
+        let realHome = getRealHomeDirectory()
+        return URL(fileURLWithPath: realHome).appendingPathComponent(".claude.json")
+    }
+
     /// 写入 Claude settings.json
     static func writeSettings(baseUrl: String, apiKey: String) throws {
         let path = settingsPath
@@ -78,6 +83,31 @@ struct SettingsFileService {
         let newData = try JSONSerialization.data(withJSONObject: existing, options: .prettyPrinted)
         try newData.write(to: path)
         print("[SettingsFileService] Settings written successfully")
+
+        // 配置 claude.json
+        try configureClaudeJson()
+    }
+
+    /// 配置 ~/.claude.json，跳过 onboarding
+    static func configureClaudeJson() throws {
+        let path = claudeJsonPath
+        print("[SettingsFileService] configureClaudeJson called, path: \(path.path)")
+
+        // 读取现有配置
+        var existing: [String: Any] = [:]
+        if FileManager.default.fileExists(atPath: path.path),
+           let data = try? Data(contentsOf: path),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            existing = json
+        }
+
+        // 设置 hasCompletedOnboarding
+        existing["hasCompletedOnboarding"] = true
+
+        // 写入文件
+        let newData = try JSONSerialization.data(withJSONObject: existing, options: .prettyPrinted)
+        try newData.write(to: path)
+        print("[SettingsFileService] Claude JSON configured successfully")
     }
 
     /// 获取当前配置的 baseURL
