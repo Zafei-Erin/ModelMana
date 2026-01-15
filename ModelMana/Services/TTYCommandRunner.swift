@@ -156,6 +156,9 @@ public struct TTYCommandRunner {
         public var stopOnSubstrings: [String] = []
         public var sendOnSubstrings: [String: String] = [:]
 
+        // For each pattern, how long to wait after sending before checking next patterns
+        public var sendDelays: [String: TimeInterval] = [:]
+
         public init(
             rows: UInt16 = 50,
             cols: UInt16 = 160,
@@ -164,7 +167,8 @@ public struct TTYCommandRunner {
             initialDelay: TimeInterval = 0.4,
             settleAfterStop: TimeInterval = 0.25,
             stopOnSubstrings: [String] = [],
-            sendOnSubstrings: [String: String] = [:]
+            sendOnSubstrings: [String: String] = [:],
+            sendDelays: [String: TimeInterval] = [:]
         ) {
             self.rows = rows
             self.cols = cols
@@ -174,6 +178,7 @@ public struct TTYCommandRunner {
             self.settleAfterStop = settleAfterStop
             self.stopOnSubstrings = stopOnSubstrings
             self.sendOnSubstrings = sendOnSubstrings
+            self.sendDelays = sendDelays
         }
     }
 
@@ -398,7 +403,8 @@ public struct TTYCommandRunner {
 
         // Prepare needles
         let stopNeedles = options.stopOnSubstrings.map { Data($0.utf8) }
-        let sendNeedles = options.sendOnSubstrings.map {
+        // Sort keys in reverse to ensure consistent order - we want longer/more specific patterns first
+        let sendNeedles = options.sendOnSubstrings.sorted { $0.key > $1.key }.map {
             (needle: Data($0.key.utf8), response: Data($0.value.utf8))
         }
         let urlNeedles = [Data("https://".utf8), Data("http://".utf8)]
@@ -439,8 +445,16 @@ public struct TTYCommandRunner {
                 let matched = scanData.range(of: item.needle) != nil ||
                     recentText.contains(needleString)
                 if matched {
+                    let responseDesc = String(data: item.response, encoding: .utf8)?.debugDescription ?? "?"
+                    print("[TTYCommandRunner] Matched '\(needleString)', sending: \(responseDesc)")
                     try? writeAll(item.response)
                     triggeredSends.insert(item.needle)
+
+                    // Check if there's a delay configured for this pattern
+                    if let delay = options.sendDelays[needleString], delay > 0 {
+                        print("[TTYCommandRunner] Waiting \(delay)s after sending '\(needleString)'")
+                        usleep(UInt32(delay * 1_000_000))
+                    }
                 }
             }
 

@@ -5,7 +5,8 @@
       "Bash(find:*)",
       "Bash(xcodebuild:*)",
       "Skill(superpowers:brainstorming)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(ls:*)"
     ]
   }
 }
