@@ -3,7 +3,9 @@
     "allow": [
       "Bash(xcodebuild build:*)",
       "Bash(find:*)",
-      "Bash(xcodebuild:*)"
+      "Bash(xcodebuild:*)",
+      "Skill(superpowers:brainstorming)",
+      "Bash(mkdir:*)"
     ]
   }
 }

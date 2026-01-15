@@ -108,6 +108,33 @@ struct ProviderListView: View {
 
             Divider().padding(.vertical, 6)
 
+            // Claude Login Section
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Claude Login")
+                    .font(.system(size: 12))
+                    .padding(.bottom, 8)
+
+                ClaudeLoginButton(
+                    method: .subscription,
+                    title: "Login with Subscription",
+                    subtitle: "Pro, Max, Team, or Enterprise"
+                )
+
+                ClaudeLoginButton(
+                    method: .console,
+                    title: "Login with Console",
+                    subtitle: "API usage billing"
+                )
+
+                // 登录状态指示器
+                if AppState.shared.claudeLoginState.isProcessing {
+                    ClaudeLoginStatusView(phase: AppState.shared.claudeLoginState.phase)
+                        .padding(.top, 4)
+                }
+            }
+
+            Divider().padding(.vertical, 6)
+
             // Quit
             Button(action: {
                 NSApplication.shared.terminate(nil)
@@ -553,4 +580,98 @@ struct BlackProgressStyle: ProgressViewStyle {
 #Preview {
     ProviderListView()
         .preferredColorScheme(.dark)
+}
+
+// MARK: - Claude Login Components
+
+struct ClaudeLoginButton: View {
+    let method: ClaudeLoginMethod
+    let title: String
+    let subtitle: String
+
+    private var isLoading: Bool {
+        AppState.shared.claudeLoginState.isProcessing
+            && AppState.shared.claudeLoginState.method == method
+    }
+
+    var body: some View {
+        Button(action: {
+            AppState.shared.startClaudeLogin(method: method)
+        }) {
+            HStack(spacing: 8) {
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.4)
+                } else {
+                    Image(systemName: "arrow.right.circle")
+                        .font(.system(size: 11))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 12))
+                        .fontWeight(.medium)
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+            .foregroundColor(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+}
+
+struct ClaudeLoginStatusView: View {
+    let phase: ClaudeLoginPhase
+
+    var body: some View {
+        HStack(spacing: 6) {
+            statusIcon
+            statusText
+        }
+        .font(.caption)
+        .foregroundColor(.secondary)
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch phase {
+        case .requesting:
+            ProgressView()
+                .scaleEffect(0.4)
+        case .waitingBrowser:
+            Image(systemName: "safari")
+                .foregroundColor(.orange)
+        case .success:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+        case .failed:
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(.red)
+        case .idle:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        switch phase {
+        case .requesting:
+            Text("Starting login...")
+        case .waitingBrowser:
+            Text("Complete login in browser")
+        case .success:
+            Text("Logged in successfully")
+        case .failed(let message):
+            Text(message)
+        case .idle:
+            EmptyView()
+        }
+    }
 }

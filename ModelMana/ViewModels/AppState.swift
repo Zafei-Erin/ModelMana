@@ -16,6 +16,9 @@ class AppState {
     // API Key 配额信息 (key 为 apiKeyId)
     var apiKeyQuotas: [String: ApiKeyQuota] = [:]
 
+    // Claude 登录状态
+    var claudeLoginState: ClaudeLoginState = ClaudeLoginState()
+
     private var quotaTimer: Timer?
 
     private init() {
@@ -86,5 +89,35 @@ class AppState {
 
     deinit {
         quotaTimer?.invalidate()
+    }
+
+    // MARK: - Claude Login
+
+    /// 启动 Claude 登录
+    func startClaudeLogin(method: ClaudeLoginMethod) {
+        print("[AppState] startClaudeLogin called with method: \(method.displayName)")
+
+        // Set initial state
+        claudeLoginState = ClaudeLoginState(phase: .requesting, method: method)
+
+        Task {
+            do {
+                try await ClaudeLoginService.shared.startLogin(method: method) { [self] newPhase in
+                    Task { @MainActor in
+                        claudeLoginState.phase = newPhase
+                    }
+                }
+                // Success - update state
+                Task { @MainActor in
+                    claudeLoginState.phase = .success
+                }
+                print("[AppState] Login completed successfully")
+            } catch {
+                print("[AppState] Login error: \(error.localizedDescription)")
+                Task { @MainActor in
+                    claudeLoginState.phase = .failed(error.localizedDescription)
+                }
+            }
+        }
     }
 }
