@@ -10,12 +10,14 @@ import Foundation
 enum Provider: String, CaseIterable, Identifiable {
     case zhipu = "Zhipu"
     case claude = "Claude"
+    case minimax = "Minimax"
 
     // 使用固定 id，不随显示名称变化
     var id: String {
         switch self {
         case .zhipu: return "zhipu"
         case .claude: return "claude"
+        case .minimax: return "minimax"
         }
     }
 
@@ -25,6 +27,8 @@ enum Provider: String, CaseIterable, Identifiable {
             return "https://open.bigmodel.cn/api/anthropic"
         case .claude:
             return "https://api.anthropic.com"
+        case .minimax:
+            return "https://api.minimaxi.com/anthropic"
         }
     }
 
@@ -34,6 +38,8 @@ enum Provider: String, CaseIterable, Identifiable {
             return "ZHIPU_API_KEY"
         case .claude:
             return "CLAUDE_API_KEY"
+        case .minimax:
+            return "MINIMAX_API_KEY"
         }
     }
 }

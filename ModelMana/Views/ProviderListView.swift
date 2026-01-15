@@ -36,6 +36,11 @@ struct ProviderListView: View {
         return nil
     }
 
+    // 过滤出有API key的provider
+    private var providersWithKeys: [ProviderConfig] {
+        AppState.shared.configuration.providers.filter { !$0.apiKeys.isEmpty }
+    }
+
     var body: some View {
         let config = AppState.shared.configuration
         return VStack(spacing: 0) {
@@ -85,23 +90,33 @@ struct ProviderListView: View {
 
                 // Provider 列表
                 VStack(spacing: 0) {
-                    ForEach(Array(config.providers.enumerated()), id: \.element.id) {
-                        index, provider in
-                        ProviderButton(
-                            providerConfig: provider,
-                            onTap: {
-                                toggleDropdown(for: provider)
-                            }
-                        )
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear.preference(
-                                    key: ButtonFrameKey.self,
-                                    value: [provider.id: geo.frame(in: .global)]
-                                )
-                            }
-                        )
-                        .padding(.bottom, index < config.providers.count - 1 ? 6 : 0)
+                    if providersWithKeys.isEmpty {
+                        // 空状态 - 没有provider有API key
+                        Text("Add keys in settings..")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                    } else {
+                        ForEach(Array(providersWithKeys.enumerated()), id: \.element.id) {
+                            index, provider in
+                            ProviderButton(
+                                providerConfig: provider,
+                                onTap: {
+                                    toggleDropdown(for: provider)
+                                }
+                            )
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: ButtonFrameKey.self,
+                                        value: [provider.id: geo.frame(in: .global)]
+                                    )
+                                }
+                            )
+                            .padding(.bottom, index < providersWithKeys.count - 1 ? 6 : 0)
+                        }
                     }
                 }
             }
@@ -341,6 +356,11 @@ struct ProviderIcon: View {
                 .frame(width: size, height: size)
         } else if providerId == "claude" {
             Image("claude")
+                .renderingMode(.template)
+                .resizable()
+                .frame(width: size, height: size)
+        } else if providerId == "minimax" {
+            Image("minimax")
                 .renderingMode(.template)
                 .resizable()
                 .frame(width: size, height: size)
