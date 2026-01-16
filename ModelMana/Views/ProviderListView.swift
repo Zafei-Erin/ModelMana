@@ -191,6 +191,11 @@ struct ProviderListView: View {
             newConfig.selectedApiKeyId = apiKeyId
             AppState.shared.configuration = newConfig
 
+            // Track credential type if this is Claude
+            if providerConfig.id == "claude" {
+                AppState.shared.selectedClaudeCredential = .manualKey(apiKeyId)
+            }
+
             print("[ModelMana] Selected: \(providerConfig.name) / \(apiKeyConfig.name)")
         } catch {
             print("[ModelMana] ERROR: \(error.localizedDescription)")
