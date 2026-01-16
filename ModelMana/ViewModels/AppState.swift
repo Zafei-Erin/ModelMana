@@ -145,6 +145,27 @@ class AppState {
                 // Success - update state
                 Task { @MainActor in
                     claudeLoginState.phase = .success
+
+                    // Set selected credential
+                    switch method {
+                    case .subscription:
+                        selectedClaudeCredential = .subscription
+                        isSubscriptionLoggedIn = true
+                        // Fetch usage for display
+                        do {
+                            let usage = try await ClaudeSessionService.refreshUsage()
+                            subscriptionUsage = usage
+                        } catch {
+                            print("[AppState] Failed to fetch subscription usage: \(error)")
+                        }
+                    case .console:
+                        selectedClaudeCredential = .console
+                        // Refresh console cost
+                        refreshClaudeConsoleCost()
+                    }
+
+                    // Write keychain auth settings
+                    try? SettingsFileService.writeKeychainAuthSettings()
                 }
                 print("[AppState] Login completed successfully")
             } catch {
