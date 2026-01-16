@@ -562,6 +562,330 @@ struct ApiKeyDropdownPanel: View {
     }
 }
 
+// MARK: - Claude Dropdown Panel
+
+struct ClaudeDropdownPanel: View {
+    let provider: ProviderConfig
+    let onSelectApiKey: (String) -> Void
+    let onSelectSubscription: () -> Void
+    let onSelectConsole: () -> Void
+
+    private var selectedApiKeyId: String? {
+        AppState.shared.configuration.selectedApiKeyId
+    }
+
+    private var selectedCredential: ClaudeCredentialType? {
+        AppState.shared.selectedClaudeCredential
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
+            apiKeySection
+            Divider()
+            subscriptionSection
+            Divider()
+            consoleSection
+        }
+        .frame(width: 260)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+    }
+
+    private var header: some View {
+        Text(provider.name)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+    }
+
+    // MARK: - API Key Section
+
+    private var apiKeySection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeader("API Keys")
+
+            if provider.apiKeys.isEmpty {
+                emptyKeysState
+            } else {
+                keyList
+            }
+        }
+    }
+
+    private var emptyKeysState: some View {
+        Text("No API keys")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+    }
+
+    private var keyList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(provider.apiKeys.enumerated()), id: \.element.id) { index, key in
+                keyButton(for: key)
+                if index < provider.apiKeys.count - 1 {
+                    Divider()
+                        .padding(.horizontal, 6)
+                }
+            }
+        }
+    }
+
+    private func keyButton(for key: ApiKeyConfig) -> some View {
+        Button(action: { onSelectApiKey(key.id) }) {
+            keyLabel(for: key)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func keyLabel(for key: ApiKeyConfig) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                keyIcon(for: key)
+                Text(key.name)
+                    .font(.system(size: 11, weight: .semibold))
+                Spacer()
+            }
+            quotaProgressView(for: key)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func quotaProgressView(for key: ApiKeyConfig) -> some View {
+        let quota = AppState.shared.getQuota(for: key.id)
+
+        VStack(alignment: .leading, spacing: 2) {
+            switch quota.status {
+            case .loading:
+                ProgressView()
+                    .scaleEffect(0.25)
+
+            case .success(let percentage, _):
+                HStack(spacing: 6) {
+                    ProgressView(value: percentage / 100, total: 1.0)
+                        .progressViewStyle(BlackProgressStyle())
+                        .frame(width: 80)
+
+                    Text("\(Int(percentage))%")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let resetText = quota.resetTimeText {
+                    Text(resetText)
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                }
+
+            case .error:
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.red)
+                    Text("failed")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .padding(.leading, 20)
+    }
+
+    private func keyIcon(for key: ApiKeyConfig) -> some View {
+        let isSelected = key.id == selectedApiKeyId &&
+                         selectedCredential == .manualKey(key.id)
+        let iconName = isSelected ? "checkmark.circle.fill" : "circle"
+        return Image(systemName: iconName)
+            .font(.system(size: 12))
+            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+    }
+
+    // MARK: - Subscription Section
+
+    private var subscriptionSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeaderWithCheck(
+                "Subscription",
+                isSelected: selectedCredential == .subscription
+            )
+
+            if AppState.shared.isSubscriptionLoggedIn {
+                subscriptionUsageView
+            } else {
+                subscriptionLoginButton
+            }
+        }
+    }
+
+    private var subscriptionLoginButton: some View {
+        Button(action: onSelectSubscription) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.right.circle")
+                    .font(.system(size: 10))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Login with Subscription")
+                        .font(.system(size: 11))
+                    Text("Pro, Max, Team, or Enterprise")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .foregroundColor(.primary)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    private var subscriptionUsageView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let usage = AppState.shared.subscriptionUsage,
+               let fiveHour = usage.fiveHour {
+                HStack(spacing: 6) {
+                    ProgressView(value: (fiveHour.utilization ?? 0) / 100, total: 1.0)
+                        .progressViewStyle(BlackProgressStyle())
+                        .frame(width: 80)
+
+                    if let utilization = fiveHour.utilization {
+                        Text("\(Int(utilization))%")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.leading, 20)
+
+                if let resetsAt = fiveHour.resetsAt,
+                   let date = ClaudeOAuthUsageFetcher.parseISO8601Date(resetsAt) {
+                    Text("Resets \(date, style: .relative) from now")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 20)
+                }
+            } else {
+                Text("Loading usage...")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+            }
+        }
+    }
+
+    // MARK: - Console Section
+
+    private var consoleSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeaderWithCheck(
+                "Console",
+                isSelected: selectedCredential == .console
+            )
+
+            if AppState.shared.claudeConsoleMetrics != nil {
+                consoleCostView
+            } else {
+                consoleLoginButton
+            }
+        }
+    }
+
+    private var consoleLoginButton: some View {
+        Button(action: onSelectConsole) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.right.circle")
+                    .font(.system(size: 10))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Login with Console")
+                        .font(.system(size: 11))
+                    Text("API usage billing")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .foregroundColor(.primary)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    private var consoleCostView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let metrics = AppState.shared.claudeConsoleMetrics {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.green)
+                    Text(metrics.formattedCost)
+                        .font(.system(size: 10))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+
+                if let updateDate = AppState.shared.lastCostUpdate {
+                    Text(updateTimeText(updateDate))
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                }
+            }
+        }
+    }
+
+    private func updateTimeText(_ date: Date) -> String {
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+
+        if interval < 60 {
+            return "刚刚"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes)分钟前"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "\(hours)小时前"
+        } else {
+            let days = Int(interval / 86400)
+            return "\(days)天前"
+        }
+    }
+
+    // MARK: - Section Headers
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+    }
+
+    private func sectionHeaderWithCheck(_ title: String, isSelected: Bool) -> some View {
+        HStack(spacing: 6) {
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.accentColor)
+            }
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+}
+
 // 自定义带 hover 效果的按钮包装器
 struct HoverButton<Content: View>: View {
     var isSelected: Bool = false
