@@ -88,6 +88,44 @@ struct SettingsFileService {
         try configureClaudeJson()
     }
 
+    /// Write Claude settings for keychain-based auth (Subscription/Console)
+    /// This sets empty strings to allow Claude CLI to use Keychain credentials
+    static func writeKeychainAuthSettings() throws {
+        let path = settingsPath
+        print("[SettingsFileService] writeKeychainAuthSettings called")
+
+        // Ensure directory exists
+        let directory = path.deletingLastPathComponent()
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+
+        // Read existing config
+        var existing: [String: Any] = [:]
+        if FileManager.default.fileExists(atPath: path.path) {
+            let data = try Data(contentsOf: path)
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                existing = json
+            }
+        }
+
+        // Set empty env values to force keychain fallback
+        existing["env"] = [
+            "ANTHROPIC_AUTH_TOKEN": "",
+            "ANTHROPIC_BASE_URL": "",
+            "API_TIMEOUT_MS": "3000000",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 1
+        ]
+
+        // Write file
+        let newData = try JSONSerialization.data(withJSONObject: existing, options: .prettyPrinted)
+        try newData.write(to: path)
+        print("[SettingsFileService] Keychain auth settings written")
+
+        // Configure claude.json
+        try configureClaudeJson()
+    }
+
     /// 配置 ~/.claude.json，跳过 onboarding
     static func configureClaudeJson() throws {
         let path = claudeJsonPath
