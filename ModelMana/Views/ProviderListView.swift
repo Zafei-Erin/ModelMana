@@ -36,9 +36,28 @@ struct ProviderListView: View {
         return nil
     }
 
-    // 过滤出有API key的provider
-    private var providersWithKeys: [ProviderConfig] {
-        AppState.shared.configuration.providers.filter { !$0.apiKeys.isEmpty }
+    // Visible providers - Claude always shows, others only if they have keys
+    private var visibleProviders: [ProviderConfig] {
+        let allProviders = AppState.shared.configuration.providers
+
+        // Always include Claude (create empty config if not present)
+        let claudeProvider: ProviderConfig
+        if let existing = allProviders.first(where: { $0.id == "claude" }) {
+            claudeProvider = existing
+        } else {
+            // Create empty Claude provider config
+            claudeProvider = ProviderConfig(
+                id: "claude",
+                name: "Claude",
+                baseUrl: Provider.claude.baseURL,
+                apiKeys: []
+            )
+        }
+
+        // Other providers only if they have keys
+        let otherProviders = allProviders.filter { !$0.apiKeys.isEmpty && $0.id != "claude" }
+
+        return [claudeProvider] + otherProviders
     }
 
     var body: some View {
@@ -90,7 +109,7 @@ struct ProviderListView: View {
 
                 // Provider 列表
                 VStack(spacing: 0) {
-                    if providersWithKeys.isEmpty {
+                    if visibleProviders.isEmpty {
                         // 空状态 - 没有provider有API key
                         Text("Add keys in settings..")
                             .font(.system(size: 12))
@@ -99,7 +118,7 @@ struct ProviderListView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
                     } else {
-                        ForEach(Array(providersWithKeys.enumerated()), id: \.element.id) {
+                        ForEach(Array(visibleProviders.enumerated()), id: \.element.id) {
                             index, provider in
                             ProviderButton(
                                 providerConfig: provider,
@@ -115,7 +134,7 @@ struct ProviderListView: View {
                                     )
                                 }
                             )
-                            .padding(.bottom, index < providersWithKeys.count - 1 ? 6 : 0)
+                            .padding(.bottom, index < visibleProviders.count - 1 ? 6 : 0)
                         }
                     }
                 }
