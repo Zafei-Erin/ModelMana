@@ -7,6 +7,14 @@
 
 import SwiftUI
 
+// MARK: - Claude Credential Type
+
+enum ClaudeCredentialType: Equatable {
+    case manualKey(String)  // apiKeyId
+    case subscription
+    case console
+}
+
 @Observable
 class AppState {
     static let shared = AppState()
@@ -23,6 +31,15 @@ class AppState {
     var claudeConsoleMetrics: ClaudeConsoleMetricsResponse?
     var costLoadingState: CostLoadingState = .idle
     var lastCostUpdate: Date?
+
+    // Track which Claude credential type is currently selected
+    var selectedClaudeCredential: ClaudeCredentialType? = nil
+
+    // Track subscription usage (for display in dropdown)
+    var subscriptionUsage: ClaudeOAuthUsageResponse? = nil
+
+    // Track subscription login status separately
+    var isSubscriptionLoggedIn: Bool = false
 
     private var quotaTimer: Timer?
     private var costTimer: Timer?
