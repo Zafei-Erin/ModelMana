@@ -439,18 +439,33 @@ struct ApiKeyDropdownPanel: View {
     }
 
     var body: some View {
-        panelContent
-            .frame(width: 220)
-            .background(Color(nsColor: .windowBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        if provider.id == "claude" {
+            ClaudeDropdownPanel(
+                provider: provider,
+                onSelectApiKey: { apiKeyId in
+                    selectApiKey(apiKeyId: apiKeyId)
+                },
+                onSelectSubscription: {
+                    selectSubscription()
+                },
+                onSelectConsole: {
+                    selectConsole()
+                }
+            )
+        } else {
+            existingPanelContent
+        }
     }
 
-    private var panelContent: some View {
+    private var existingPanelContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             keyList
         }
+        .frame(width: 220)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
     }
 
     private var header: some View {
@@ -559,6 +574,18 @@ struct ApiKeyDropdownPanel: View {
         return Image(systemName: iconName)
             .font(.system(size: 14))
             .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+    }
+
+    private func selectApiKey(apiKeyId: String) {
+        onSelectApiKey(apiKeyId)
+    }
+
+    private func selectSubscription() {
+        AppState.shared.startClaudeLogin(method: .subscription)
+    }
+
+    private func selectConsole() {
+        AppState.shared.startClaudeLogin(method: .console)
     }
 }
 
