@@ -150,6 +150,21 @@ struct ProviderListView: View {
 
             Divider().padding(.vertical, 6)
 
+            // Claude Console Cost Section
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 4) {
+                    Text("本月成本")
+                        .font(.system(size: 12))
+                    Spacer()
+                    costRefreshButton
+                }
+                .padding(.bottom, 8)
+
+                ClaudeCostView()
+            }
+
+            Divider().padding(.vertical, 6)
+
             // Quit
             Button(action: {
                 NSApplication.shared.terminate(nil)
@@ -600,6 +615,106 @@ struct BlackProgressStyle: ProgressViewStyle {
 #Preview {
     ProviderListView()
         .preferredColorScheme(.dark)
+}
+
+// MARK: - Claude Console Cost View
+
+struct ClaudeCostView: View {
+    private var state: AppState { AppState.shared }
+
+    var body: some View {
+        let costState = state.costLoadingState
+
+        switch costState {
+        case .idle:
+            HStack(spacing: 6) {
+                Image(systemName: "dashlane")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text("点击刷新获取成本")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+        case .loading:
+            HStack(spacing: 6) {
+                ProgressView()
+                    .scaleEffect(0.4)
+                Text("获取中...")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+        case .success:
+            if let metrics = state.claudeConsoleMetrics {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.green)
+                    Text(metrics.formattedCost)
+                        .font(.system(size: 11))
+                        .fontWeight(.semibold)
+                }
+
+                if let updateDate = state.lastCostUpdate {
+                    Text(updateTimeText(updateDate))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("无数据")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+        case .error(let message):
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+                Text(getShortErrorMessage(message))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func updateTimeText(_ date: Date) -> String {
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+
+        if interval < 60 {
+            return "刚刚"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes)分钟前"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "\(hours)小时前"
+        } else {
+            let days = Int(interval / 86400)
+            return "\(days)天前"
+        }
+    }
+
+    private func getShortErrorMessage(_ message: String) -> String {
+        if message.count > 30 {
+            return String(message.prefix(27)) + "..."
+        }
+        return message
+    }
+}
+
+private var costRefreshButton: some View {
+    Button(action: {
+        AppState.shared.refreshClaudeConsoleCost()
+    }) {
+        Image(systemName: "arrow.clockwise")
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+    }
+    .buttonStyle(.plain)
+    .help("刷新成本数据")
 }
 
 // MARK: - Claude Login Components

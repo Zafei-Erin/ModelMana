@@ -19,7 +19,13 @@ class AppState {
     // Claude 登录状态
     var claudeLoginState: ClaudeLoginState = ClaudeLoginState()
 
+    // Claude Console 成本追踪状态
+    var claudeConsoleMetrics: ClaudeConsoleMetricsResponse?
+    var costLoadingState: CostLoadingState = .idle
+    var lastCostUpdate: Date?
+
     private var quotaTimer: Timer?
+    private var costTimer: Timer?
 
     private init() {
         configuration = ConfigService.loadConfiguration()
@@ -34,8 +40,12 @@ class AppState {
         // 启动时立即获取 Zhipu 配额
         refreshAllZhipuQuotas()
 
+        // 启动时尝试获取 Claude Console 成本
+        refreshClaudeConsoleCost()
+
         // 每 10 分钟自动刷新
         startQuotaTimer()
+        startCostTimer()
     }
 
     /// 获取指定 API Key 的配额信息
@@ -96,6 +106,7 @@ class AppState {
 
     deinit {
         quotaTimer?.invalidate()
+        costTimer?.invalidate()
     }
 
     // MARK: - Claude Login
@@ -125,6 +136,56 @@ class AppState {
                     claudeLoginState.phase = .failed(error.localizedDescription)
                 }
             }
+        }
+    }
+
+    // MARK: - Claude Console Cost
+
+    /// 刷新 Claude Console 成本数据
+    func refreshClaudeConsoleCost() {
+        costLoadingState = .loading
+
+        Task { @MainActor in
+            do {
+                print("[AppState] 开始获取 Claude Console 成本...")
+                let metrics = try await ClaudeConsoleCostService.fetchCurrentMonthMetrics()
+                self.claudeConsoleMetrics = metrics
+                self.costLoadingState = .success
+                self.lastCostUpdate = Date()
+                print("[AppState] 成本获取成功: \(metrics.formattedCost)")
+            } catch {
+                print("[AppState] 成本获取失败: \(error.localizedDescription)")
+                self.costLoadingState = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    /// 启动成本数据定时器（每 10 分钟刷新一次）
+    private func startCostTimer() {
+        costTimer?.invalidate()
+
+        costTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in
+            self?.refreshClaudeConsoleCost()
+        }
+    }
+}
+
+// MARK: - Cost Loading State
+
+enum CostLoadingState: Equatable {
+    case idle
+    case loading
+    case success
+    case error(String)
+
+    static func == (lhs: CostLoadingState, rhs: CostLoadingState) -> Bool {
+        switch (lhs, rhs) {
+        case (.idle, .idle), (.loading, .loading), (.success, .success):
+            return true
+        case (.error(let lhsMsg), .error(let rhsMsg)):
+            return lhsMsg == rhsMsg
+        default:
+            return false
         }
     }
 }

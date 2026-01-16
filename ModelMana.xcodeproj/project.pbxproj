@@ -29,6 +29,15 @@
 		8F34EB842F07D2F8008584FC /* ModelManaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ModelManaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8F34EB972F07E425008584FC /* Exceptions for "ModelMana" folder in "ModelMana" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+			);
+			target = 8F34EB6B2F07D2F3008584FC /* ModelMana */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8F34EB6E2F07D2F3008584FC /* ModelMana */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -112,6 +121,7 @@
 			);
 			name = ModelMana;
 			packageProductDependencies = (
+				8F34EB992F07E548008584FC /* XCSwiftPackageProductDependency "SweetCookieKit" */,
 			);
 			productName = ModelMana;
 			productReference = 8F34EB6C2F07D2F3008584FC /* ModelMana.app */;
@@ -195,6 +205,9 @@
 			);
 			mainGroup = 8F34EB632F07D2F3008584FC;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8F34EB982F07E530008584FC /* XCRemoteSwiftPackageReference "SweetCookieKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8F34EB6D2F07D2F3008584FC /* Products */;
 			projectDirPath = "";
@@ -267,6 +280,26 @@
 			targetProxy = 8F34EB852F07D2F8008584FC /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8F34EB982F07E530008584FC /* XCRemoteSwiftPackageReference "SweetCookieKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/steipete/SweetCookieKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.4;
+				version = 0.1.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8F34EB992F07E548008584FC /* XCSwiftPackageProductDependency "SweetCookieKit" */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8F34EB982F07E530008584FC /* XCRemoteSwiftPackageReference "SweetCookieKit" */;
+			productName = SweetCookieKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8F34EB8C2F07D2F8008584FC /* Debug */ = {
