@@ -140,49 +140,6 @@ struct ProviderListView: View {
                 }
             }
 
-            Divider().padding(.vertical, 6)
-
-            // Claude Login Section
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Claude Login")
-                    .font(.system(size: 12))
-                    .padding(.bottom, 8)
-
-                ClaudeLoginButton(
-                    method: .subscription,
-                    title: "Login with Subscription",
-                    subtitle: "Pro, Max, Team, or Enterprise"
-                )
-
-                ClaudeLoginButton(
-                    method: .console,
-                    title: "Login with Console",
-                    subtitle: "API usage billing"
-                )
-
-                // 登录状态指示器
-                if AppState.shared.claudeLoginState.isProcessing {
-                    ClaudeLoginStatusView(phase: AppState.shared.claudeLoginState.phase)
-                        .padding(.top, 4)
-                }
-            }
-
-            Divider().padding(.vertical, 6)
-
-            // Claude Console Cost Section
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 4) {
-                    Text("本月成本")
-                        .font(.system(size: 12))
-                    Spacer()
-                    costRefreshButton
-                }
-                .padding(.bottom, 8)
-
-                ClaudeCostView()
-            }
-
-            Divider().padding(.vertical, 6)
 
             // Quit
             Button(action: {
