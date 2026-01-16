@@ -362,6 +362,11 @@ struct ProviderSettingsCard: View {
         newConfig.selectedApiKeyId = id
         appState.configuration = newConfig
         try? ConfigService.saveConfiguration(appState.configuration)
+
+        // Track credential type if this is Claude
+        if provider.id == "claude" {
+            AppState.shared.selectedClaudeCredential = .manualKey(id)
+        }
     }
 
     private func deleteKey(_ id: String) {
