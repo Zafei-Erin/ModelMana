@@ -146,11 +146,18 @@ class AppState {
                 Task { @MainActor in
                     claudeLoginState.phase = .success
 
-                    // Set selected credential
+                    // Set selected credential and update configuration
                     switch method {
                     case .subscription:
                         selectedClaudeCredential = .subscription
                         isSubscriptionLoggedIn = true
+                        // Update configuration to reflect Claude as current provider
+                        var newConfig = configuration
+                        newConfig.selectedProviderId = "claude"
+                        newConfig.selectedApiKeyId = nil  // No API key for subscription
+                        configuration = newConfig
+                        // Save configuration
+                        try? ConfigService.saveConfiguration(newConfig)
                         // Fetch usage for display
                         do {
                             let usage = try await ClaudeSessionService.refreshUsage()
@@ -160,6 +167,13 @@ class AppState {
                         }
                     case .console:
                         selectedClaudeCredential = .console
+                        // Update configuration to reflect Claude as current provider
+                        var newConfig = configuration
+                        newConfig.selectedProviderId = "claude"
+                        newConfig.selectedApiKeyId = nil  // No API key for console
+                        configuration = newConfig
+                        // Save configuration
+                        try? ConfigService.saveConfiguration(newConfig)
                         // Refresh console cost
                         refreshClaudeConsoleCost()
                     }

@@ -2,7 +2,7 @@
 //  ClaudeLoginService.swift
 //  ModelMana
 //
-//  Claude login service using PTY
+//  Claude login/logout service using PTY
 //
 
 import Foundation
@@ -110,6 +110,63 @@ final class ClaudeLoginService {
                 throw ClaudeLoginError.commandFailed(output)
             }
 
+        } catch TTYCommandRunner.Error.binaryNotFound {
+            throw ClaudeLoginError.cliNotFound
+        } catch TTYCommandRunner.Error.timedOut {
+            throw ClaudeLoginError.timedOut
+        } catch TTYCommandRunner.Error.launchFailed(let message) {
+            throw ClaudeLoginError.launchFailed(message)
+        }
+    }
+
+    /// Start Claude logout process
+    /// Runs `claude /logout` to let Claude CLI clean up its own credentials
+    /// - Returns: Async throws - success or error
+    func startLogout() async throws {
+        print("[ClaudeLoginService] Starting logout via CLI")
+
+        let runner = TTYCommandRunner()
+        var options = TTYCommandRunner.Options(
+            rows: 50,
+            cols: 160,
+            timeout: 30,
+            extraArgs: ["/logout"],
+            initialDelay: 0.4,
+            settleAfterStop: 0.35
+        )
+
+        // Stop when logout succeeds
+        options.stopOnSubstrings = [
+            "Logged out successfully",
+            "Successfully logged out",
+            "You have been logged out"
+        ]
+
+        do {
+            let result = try runner.run(
+                binary: "claude",
+                send: "",
+                options: options,
+                onURLDetected: {}
+            )
+
+            // Verify success by checking output
+            let output = result.text
+            let hasSuccess = options.stopOnSubstrings.contains { output.contains($0) }
+
+            if hasSuccess {
+                print("[ClaudeLoginService] Logout completed successfully")
+                // Invalidate cache after logout
+                ClaudeSessionService.invalidateCache()
+            } else {
+                // Even if we don't see the success message, logout might have worked
+                // Check if we're now logged out
+                if !ClaudeSessionService.isLoggedIn() {
+                    print("[ClaudeLoginService] Logout verified (no longer logged in)")
+                } else {
+                    print("[ClaudeLoginService] Logout may not have completed, but continuing...")
+                }
+            }
         } catch TTYCommandRunner.Error.binaryNotFound {
             throw ClaudeLoginError.cliNotFound
         } catch TTYCommandRunner.Error.timedOut {

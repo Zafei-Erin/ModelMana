@@ -95,7 +95,8 @@ struct ProviderListView: View {
                             $0.id == config.selectedApiKeyId
                         })?.name ?? "Default",
                         apiKeyId: config.selectedApiKeyId
-                    ).padding(.horizontal, 2)
+                    )
+                    .padding(.horizontal, 2)
                 }
             }
 
@@ -140,7 +141,6 @@ struct ProviderListView: View {
                 }
             }
 
-
             // Quit
             Button(action: {
                 NSApplication.shared.terminate(nil)
@@ -181,6 +181,28 @@ struct ProviderListView: View {
             return
         }
 
+        let currentCredential = AppState.shared.selectedClaudeCredential
+        print(
+            "[ModelMana] Current credential: \(String(describing: currentCredential)), switching to: \(providerConfig.id)"
+        )
+
+        // If switching away from Claude subscription/console, delete keychain entry
+        if case .subscription = currentCredential {
+            if providerConfig.id != "claude" {
+                print(
+                    "[ModelMana] Switching from subscription to \(providerConfig.id), deleting keychain"
+                )
+                SettingsFileService.deleteClaudeKeychainEntry()
+                AppState.shared.isSubscriptionLoggedIn = false
+            }
+        } else if case .console = currentCredential {
+            if providerConfig.id != "claude" {
+                print(
+                    "[ModelMana] Switching from console to \(providerConfig.id), deleting keychain")
+                SettingsFileService.deleteClaudeKeychainEntry()
+            }
+        }
+
         do {
             try SettingsFileService.writeSettings(
                 baseUrl: providerConfig.baseUrl,
@@ -194,6 +216,9 @@ struct ProviderListView: View {
             // Track credential type if this is Claude
             if providerConfig.id == "claude" {
                 AppState.shared.selectedClaudeCredential = .manualKey(apiKeyId)
+            } else {
+                // Clear Claude credential when switching to other providers
+                AppState.shared.selectedClaudeCredential = nil
             }
 
             print("[ModelMana] Selected: \(providerConfig.name) / \(apiKeyConfig.name)")
@@ -282,19 +307,178 @@ struct ActiveKeySection: View {
     let apiKeyName: String
     let apiKeyId: String?
 
+    private var credentialType: ClaudeCredentialType? {
+        AppState.shared.selectedClaudeCredential
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             ProviderIcon(providerId: providerId, size: 24)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(providerName) - \(apiKeyName)")
+                Text(displayName)
                     .font(.system(size: 12))
                     .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-                quotaProgressView(for: apiKeyId)
+                // Only show left-side progress for non-Claude providers
+                if providerId != "claude" {
+                    quotaProgressView(for: apiKeyId)
+                }
+            }
+
+            Spacer()
+
+            // Right side info for Claude (all credential types)
+            if providerId == "claude", let credential = credentialType {
+                rightSideInfo(for: credential)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var displayName: String {
+        if providerId == "claude", let credential = credentialType {
+            switch credential {
+            case .manualKey:
+                return "\(providerName) - \(apiKeyName)"
+            case .subscription:
+                return "\(providerName) - Subscription"
+            case .console:
+                return "\(providerName) - Console"
+            }
+        }
+        return "\(providerName) - \(apiKeyName)"
+    }
+
+    @ViewBuilder
+    private func rightSideInfo(for credential: ClaudeCredentialType) -> some View {
+        switch credential {
+        case .manualKey:
+            manualKeyRightSideInfo
+        case .subscription:
+            subscriptionRightSideInfo
+        case .console:
+            consoleRightSideInfo
+        }
+    }
+
+    private var manualKeyRightSideInfo: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            if let apiKeyId {
+                let quota = AppState.shared.getQuota(for: apiKeyId)
+                switch quota.status {
+                case .loading:
+                    ProgressView()
+                        .scaleEffect(0.5)
+                case .success(let percentage, _):
+                    HStack(spacing: 6) {
+                        ProgressView(value: percentage / 100, total: 1.0)
+                            .progressViewStyle(BlackProgressStyle())
+                            .frame(width: 50)
+
+                        Text("\(Int(percentage))%")
+                            .font(.system(size: 11))
+                            .fontWeight(.medium)
+                    }
+                    if let resetText = quota.resetTimeText {
+                        Text(resetText)
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                    }
+                case .error:
+                    Text("Error")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var subscriptionRightSideInfo: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            if let usage = AppState.shared.subscriptionUsage,
+               let fiveHour = usage.fiveHour {
+                HStack(spacing: 6) {
+                    ProgressView(value: (fiveHour.utilization ?? 0) / 100, total: 1.0)
+                        .progressViewStyle(BlackProgressStyle())
+                        .frame(width: 50)
+
+                    if let utilization = fiveHour.utilization {
+                        Text("\(Int(utilization))%")
+                            .font(.system(size: 11))
+                            .fontWeight(.medium)
+                    }
+                }
+                if let resetsAt = fiveHour.resetsAt,
+                   let date = ClaudeOAuthUsageFetcher.parseISO8601Date(resetsAt) {
+                    Text(resetsInText(date))
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Loading...")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var consoleRightSideInfo: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            if let metrics = AppState.shared.claudeConsoleMetrics {
+                Text(metrics.formattedCost)
+                    .font(.system(size: 11))
+                    .fontWeight(.medium)
+
+                if let updateDate = AppState.shared.lastCostUpdate {
+                    Text(updateTimeText(updateDate))
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Loading...")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func resetsInText(_ date: Date) -> String {
+        let now = Date()
+        let interval = date.timeIntervalSinceNow
+
+        if interval <= 0 {
+            return "Resets soon"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "Resets in \(minutes)m"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "Resets in \(hours)h"
+        } else {
+            let days = Int(interval / 86400)
+            return "Resets in \(days)d"
+        }
+    }
+
+    private func updateTimeText(_ date: Date) -> String {
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+
+        if interval < 60 {
+            return "刚刚"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes)分钟前"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "\(hours)小时前"
+        } else {
+            let days = Int(interval / 86400)
+            return "\(days)天前"
+        }
     }
 
     @ViewBuilder
@@ -551,7 +735,7 @@ struct ApiKeyDropdownPanel: View {
     }
 }
 
-// MARK: - Claude Dropdown Panel
+// MARK: - Claude Dropdown Panel (Card-Based Design)
 
 struct ClaudeDropdownPanel: View {
     let provider: ProviderConfig
@@ -567,17 +751,22 @@ struct ClaudeDropdownPanel: View {
         AppState.shared.selectedClaudeCredential
     }
 
+    private var loginState: ClaudeLoginState {
+        AppState.shared.claudeLoginState
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider()
-            apiKeySection
-            Divider()
-            subscriptionSection
-            Divider()
-            consoleSection
+            VStack(spacing: 8) {
+                apiKeyCardsSection
+                subscriptionCard
+                consoleCard
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
         }
-        .frame(width: 260)
+        .frame(width: 220)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
@@ -590,288 +779,266 @@ struct ClaudeDropdownPanel: View {
             .padding(.vertical, 8)
     }
 
-    // MARK: - API Key Section
+    // MARK: - API Keys Section
 
-    private var apiKeySection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            sectionHeader("API Keys")
-
-            if provider.apiKeys.isEmpty {
-                emptyKeysState
-            } else {
-                keyList
+    @ViewBuilder
+    private var apiKeyCardsSection: some View {
+        if provider.apiKeys.isEmpty {
+            emptyApiKeysCard
+        } else {
+            ForEach(provider.apiKeys, id: \.id) { key in
+                apiKeyCard(for: key)
             }
         }
     }
 
-    private var emptyKeysState: some View {
-        Text("No API keys")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+    private var emptyApiKeysCard: some View {
+        ClaudeCredentialCard(
+            title: "API Keys",
+            subtitle: "Add keys in settings",
+            progressValue: nil,
+            progressText: nil,
+            isSelected: false,
+            actionType: .checkmark,
+            isLoading: false,
+            action: {}
+        )
     }
 
-    private var keyList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(provider.apiKeys.enumerated()), id: \.element.id) { index, key in
-                keyButton(for: key)
-                if index < provider.apiKeys.count - 1 {
-                    Divider()
-                        .padding(.horizontal, 6)
+    private func apiKeyCard(for key: ApiKeyConfig) -> some View {
+        let isSelected = selectedCredential?.isManualKey(selectedId: selectedApiKeyId) == true &&
+                        selectedApiKeyId == key.id
+        let quota = AppState.shared.getQuota(for: key.id)
+        var progressValue: Double?
+        var progressText: String?
+
+        if case .success(let percentage, _) = quota.status {
+            progressValue = percentage
+            progressText = "\(Int(percentage))%"
+        }
+
+        return ClaudeCredentialCard(
+            title: key.name,
+            subtitle: "API Key",
+            progressValue: progressValue,
+            progressText: progressText,
+            isSelected: isSelected,
+            actionType: .checkmark,
+            isLoading: false,
+            action: {
+                onSelectApiKey(key.id)
+            }
+        )
+    }
+
+    // MARK: - Subscription Card
+
+    private var subscriptionCard: some View {
+        ClaudeCredentialCard(
+            title: "Subscription",
+            subtitle: subscriptionCardSubtitle,
+            progressValue: subscriptionProgressValue,
+            progressText: subscriptionProgressText,
+            isSelected: selectedCredential == .subscription,
+            actionType: .chevron,
+            isLoading: loginState.isProcessing && loginState.method == .subscription,
+            action: onSelectSubscription
+        )
+    }
+
+    private var subscriptionCardSubtitle: String {
+        if AppState.shared.isSubscriptionLoggedIn {
+            return "Pro, Max, Team, or Enterprise"
+        }
+        return "Login to use your subscription"
+    }
+
+    private var subscriptionProgressValue: Double? {
+        guard AppState.shared.isSubscriptionLoggedIn,
+            let usage = AppState.shared.subscriptionUsage?.fiveHour?.utilization
+        else {
+            return nil
+        }
+        return usage
+    }
+
+    private var subscriptionProgressText: String? {
+        guard AppState.shared.isSubscriptionLoggedIn,
+            let usage = AppState.shared.subscriptionUsage?.fiveHour?.utilization
+        else {
+            return nil
+        }
+        return "\(Int(usage))%"
+    }
+
+    // MARK: - Console Card
+
+    private var consoleCard: some View {
+        ClaudeCredentialCard(
+            title: "Console",
+            subtitle: consoleCardSubtitle,
+            progressValue: nil,  // Console shows cost, not percentage
+            progressText: consoleCostText,
+            isSelected: selectedCredential == .console,
+            actionType: .chevron,
+            isLoading: loginState.isProcessing && loginState.method == .console,
+            action: onSelectConsole
+        )
+    }
+
+    private var consoleCardSubtitle: String {
+        if AppState.shared.claudeConsoleMetrics != nil {
+            return "API usage billing"
+        }
+        return "Login to track console costs"
+    }
+
+    private var consoleCostText: String? {
+        guard let metrics = AppState.shared.claudeConsoleMetrics else {
+            return nil
+        }
+        return metrics.formattedCost
+    }
+}
+
+// MARK: - Claude Credential Card
+
+enum ClaudeCardActionType {
+    case checkmark  // For API Keys - shows selection state
+    case chevron  // For Subscription/Console - navigation to login
+}
+
+struct ClaudeCredentialCard: View {
+    let title: String
+    let subtitle: String
+    let progressValue: Double?  // Percentage for API Keys/Subscription
+    let progressText: String?  // Display text (e.g., "29%" or "$10.65")
+    let isSelected: Bool
+    let actionType: ClaudeCardActionType
+    let isLoading: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                // Left: Circular progress indicator
+                progressIndicator
+
+                // Middle: Title and subtitle
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(isLoading ? "Logging in..." : subtitle)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                // Right: Action button (checkmark, chevron, or loading spinner)
+                if isLoading {
+                    loadingSpinner
+                } else {
+                    actionButton
                 }
             }
-        }
-    }
-
-    private func keyButton(for key: ApiKeyConfig) -> some View {
-        Button(action: { onSelectApiKey(key.id) }) {
-            keyLabel(for: key)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(cardBackground)
         }
         .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 
-    private func keyLabel(for key: ApiKeyConfig) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                keyIcon(for: key)
-                Text(key.name)
-                    .font(.system(size: 11, weight: .semibold))
-                Spacer()
-            }
-            quotaProgressView(for: key)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(Color(nsColor: .controlBackgroundColor))
+            .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 
     @ViewBuilder
-    private func quotaProgressView(for key: ApiKeyConfig) -> some View {
-        let quota = AppState.shared.getQuota(for: key.id)
+    private var progressIndicator: some View {
+        if let value = progressValue, let text = progressText {
+            // Show circular progress ring
+            ZStack {
+                Circle()
+                    .stroke(
+                        Color.gray.opacity(0.2),
+                        lineWidth: 2.5
+                    )
 
-        VStack(alignment: .leading, spacing: 2) {
-            switch quota.status {
-            case .loading:
-                ProgressView()
-                    .scaleEffect(0.25)
+                Circle()
+                    .trim(from: 0, to: value / 100)
+                    .stroke(
+                        Color.accentColor,
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
 
-            case .success(let percentage, _):
-                HStack(spacing: 6) {
-                    ProgressView(value: percentage / 100, total: 1.0)
-                        .progressViewStyle(BlackProgressStyle())
-                        .frame(width: 80)
-
-                    Text("\(Int(percentage))%")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
-
-                if let resetText = quota.resetTimeText {
-                    Text(resetText)
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                }
-
-            case .error:
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.red)
-                    Text("failed")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.red)
-                }
+                Text(text)
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.primary)
             }
-        }
-        .padding(.leading, 20)
-    }
+            .frame(width: 32, height: 32)
+        } else if let costText = progressText, actionType == .chevron && title == "Console" {
+            // Console shows cost in circle
+            ZStack {
+                Circle()
+                    .stroke(
+                        Color.gray.opacity(0.2),
+                        lineWidth: 2.5
+                    )
 
-    private func keyIcon(for key: ApiKeyConfig) -> some View {
-        let isSelected = key.id == selectedApiKeyId &&
-                         selectedCredential == .manualKey(key.id)
-        let iconName = isSelected ? "checkmark.circle.fill" : "circle"
-        return Image(systemName: iconName)
-            .font(.system(size: 12))
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-    }
-
-    // MARK: - Subscription Section
-
-    private var subscriptionSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            sectionHeaderWithCheck(
-                "Subscription",
-                isSelected: selectedCredential == .subscription
-            )
-
-            if AppState.shared.isSubscriptionLoggedIn {
-                subscriptionUsageView
-            } else {
-                subscriptionLoginButton
+                Text(costText)
+                    .font(.system(size: 7, weight: .medium))
+                    .foregroundStyle(.primary)
             }
-        }
-    }
-
-    private var subscriptionLoginButton: some View {
-        Button(action: onSelectSubscription) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.right.circle")
-                    .font(.system(size: 10))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Login with Subscription")
-                        .font(.system(size: 11))
-                    Text("Pro, Max, Team, or Enterprise")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .foregroundColor(.primary)
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-    }
-
-    private var subscriptionUsageView: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let usage = AppState.shared.subscriptionUsage,
-               let fiveHour = usage.fiveHour {
-                HStack(spacing: 6) {
-                    ProgressView(value: (fiveHour.utilization ?? 0) / 100, total: 1.0)
-                        .progressViewStyle(BlackProgressStyle())
-                        .frame(width: 80)
-
-                    if let utilization = fiveHour.utilization {
-                        Text("\(Int(utilization))%")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.leading, 20)
-
-                if let resetsAt = fiveHour.resetsAt,
-                   let date = ClaudeOAuthUsageFetcher.parseISO8601Date(resetsAt) {
-                    Text("Resets \(date, style: .relative) from now")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 20)
-                }
-            } else {
-                Text("Loading usage...")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-            }
-        }
-    }
-
-    // MARK: - Console Section
-
-    private var consoleSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            sectionHeaderWithCheck(
-                "Console",
-                isSelected: selectedCredential == .console
-            )
-
-            if AppState.shared.claudeConsoleMetrics != nil {
-                consoleCostView
-            } else {
-                consoleLoginButton
-            }
-        }
-    }
-
-    private var consoleLoginButton: some View {
-        Button(action: onSelectConsole) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.right.circle")
-                    .font(.system(size: 10))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Login with Console")
-                        .font(.system(size: 11))
-                    Text("API usage billing")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .foregroundColor(.primary)
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-    }
-
-    private var consoleCostView: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let metrics = AppState.shared.claudeConsoleMetrics {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.green)
-                    Text(metrics.formattedCost)
-                        .font(.system(size: 10))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-
-                if let updateDate = AppState.shared.lastCostUpdate {
-                    Text(updateTimeText(updateDate))
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                }
-            }
-        }
-    }
-
-    private func updateTimeText(_ date: Date) -> String {
-        let now = Date()
-        let interval = now.timeIntervalSince(date)
-
-        if interval < 60 {
-            return "刚刚"
-        } else if interval < 3600 {
-            let minutes = Int(interval / 60)
-            return "\(minutes)分钟前"
-        } else if interval < 86400 {
-            let hours = Int(interval / 3600)
-            return "\(hours)小时前"
+            .frame(width: 32, height: 32)
         } else {
-            let days = Int(interval / 86400)
-            return "\(days)天前"
-        }
-    }
-
-    // MARK: - Section Headers
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-    }
-
-    private func sectionHeaderWithCheck(_ title: String, isSelected: Bool) -> some View {
-        HStack(spacing: 6) {
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.accentColor)
+            // Empty circle for not logged in
+            ZStack {
+                Circle()
+                    .stroke(
+                        Color.gray.opacity(0.2),
+                        lineWidth: 2.5
+                    )
             }
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-            Spacer()
+            .frame(width: 32, height: 32)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        if actionType == .checkmark || (actionType == .chevron && isSelected) {
+            // Blue checkmark for selected state
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 18))
+                .foregroundStyle(isSelected ? Color.accentColor : Color.gray.opacity(0.4))
+        } else {
+            // Chevron for navigation when not logged in
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.gray.opacity(0.5))
+        }
+    }
+
+    private var loadingSpinner: some View {
+        ProgressView()
+            .scaleEffect(0.5)
+    }
+}
+
+// MARK: - ClaudeCredentialType Helper Extension
+
+extension ClaudeCredentialType {
+    func isManualKey(selectedId: String?) -> Bool {
+        if case .manualKey(let id) = self {
+            return id == selectedId
+        }
+        return false
     }
 }
 

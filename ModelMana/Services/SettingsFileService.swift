@@ -89,7 +89,7 @@ struct SettingsFileService {
     }
 
     /// Write Claude settings for keychain-based auth (Subscription/Console)
-    /// This sets empty strings to allow Claude CLI to use Keychain credentials
+    /// This removes auth tokens from env to allow Claude CLI to use Keychain credentials
     static func writeKeychainAuthSettings() throws {
         let path = settingsPath
         print("[SettingsFileService] writeKeychainAuthSettings called")
@@ -109,13 +109,14 @@ struct SettingsFileService {
             }
         }
 
-        // Set empty env values to force keychain fallback
-        existing["env"] = [
-            "ANTHROPIC_AUTH_TOKEN": "",
-            "ANTHROPIC_BASE_URL": "",
-            "API_TIMEOUT_MS": "3000000",
-            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 1
-        ]
+        // Get or create env dict, REMOVE auth keys (don't set to empty)
+        // When keys are absent, Claude CLI falls back to keychain
+        var env = existing["env"] as? [String: Any] ?? [:]
+        env.removeValue(forKey: "ANTHROPIC_AUTH_TOKEN")
+        env.removeValue(forKey: "ANTHROPIC_BASE_URL")
+        env["API_TIMEOUT_MS"] = "3000000"
+        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = 1
+        existing["env"] = env
 
         // Write file
         let newData = try JSONSerialization.data(withJSONObject: existing, options: .prettyPrinted)
@@ -180,5 +181,23 @@ struct SettingsFileService {
 
         print("[SettingsFileService] Current baseURL: \(baseURL)")
         return baseURL
+    }
+
+    /// Delete Claude Code keychain entry
+    /// Called when switching away from Claude subscription/console login
+    /// Uses `claude /logout` to let Claude CLI clean up its own credentials
+    static func deleteClaudeKeychainEntry() {
+        print("[SettingsFileService] deleteClaudeKeychainEntry called - using claude /logout")
+
+        // Run logout asynchronously
+        Task {
+            do {
+                try await ClaudeLoginService.shared.startLogout()
+                print("[SettingsFileService] Claude logout completed successfully")
+            } catch {
+                print("[SettingsFileService] Claude logout failed: \(error.localizedDescription)")
+                // Logout failure is not critical - settings.json will be updated anyway
+            }
+        }
     }
 }
