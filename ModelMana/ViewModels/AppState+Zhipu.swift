@@ -45,8 +45,8 @@ extension AppState {
         }
     }
 
-    /// Refresh all Zhipu provider API Key quotas
-    func refreshAllZhipuQuotas() {
+    /// Refresh Zhipu provider API Key quotas
+    func refreshZhipuQuotas() {
         // Find all zhipu provider API keys
         for provider in configuration.providers {
             if provider.id == "zhipu" {
@@ -54,15 +54,6 @@ extension AppState {
                     fetchZhipuQuota(apiKey: apiKey.key, apiKeyId: apiKey.id)
                 }
             }
-        }
-    }
-
-    /// Start quota timer (refresh every 10 minutes)
-    func startQuotaTimer() {
-        quotaTimer?.invalidate()
-
-        quotaTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in
-            self?.refreshAllZhipuQuotas()
         }
     }
 }

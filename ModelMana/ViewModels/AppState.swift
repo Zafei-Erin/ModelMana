@@ -63,14 +63,14 @@ class AppState {
             }
         }
 
-        // Immediately fetch Zhipu quota on launch
-        refreshAllZhipuQuotas()
+        // Immediately fetch quotas on launch
+        refreshAllQuotas()
 
         // Try to fetch Claude Console cost on launch
         refreshClaudeConsoleCost()
 
         // Start auto-refresh timers (every 10 minutes)
-        startQuotaTimer()
+        startQuotaRefreshTimer()
         startCostTimer()
     }
 
@@ -79,5 +79,22 @@ class AppState {
     deinit {
         quotaTimer?.invalidate()
         costTimer?.invalidate()
+    }
+
+    // MARK: - Quota Refresh
+
+    /// Refresh quotas for all providers
+    func refreshAllQuotas() {
+        refreshZhipuQuotas()
+        // Add other provider quota refresh here in the future
+    }
+
+    /// Start quota refresh timer (every 10 minutes)
+    func startQuotaRefreshTimer() {
+        quotaTimer?.invalidate()
+
+        quotaTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in
+            self?.refreshAllQuotas()
+        }
     }
 }
