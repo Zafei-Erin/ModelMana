@@ -79,22 +79,17 @@ class AppState {
 
     /// Refresh all data (quotas, costs, etc.)
     func refreshAllData() {
-        refreshQuotas()
+        refreshZhipuQuotas()
         refreshClaudeConsoleCost()
         // Add more data refresh here in the future
-    }
-
-    /// Refresh quotas for all providers
-    func refreshQuotas() {
-        refreshZhipuQuotas()
-        // Add other provider quota refresh here in the future
     }
 
     /// Start data refresh timer (every 10 minutes)
     func startDataRefreshTimer() {
         dataRefreshTimer?.invalidate()
 
-        dataRefreshTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in
+        dataRefreshTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) {
+            [weak self] _ in
             self?.refreshAllData()
         }
     }
