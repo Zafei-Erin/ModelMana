@@ -48,8 +48,7 @@ class AppState {
 
     // MARK: - Timers
 
-    var quotaTimer: Timer?
-    var costTimer: Timer?
+    private var dataRefreshTimer: Timer?
 
     // MARK: - Initialization
 
@@ -63,38 +62,40 @@ class AppState {
             }
         }
 
-        // Immediately fetch quotas on launch
-        refreshAllQuotas()
+        // Immediately fetch all data on launch
+        refreshAllData()
 
-        // Try to fetch Claude Console cost on launch
-        refreshClaudeConsoleCost()
-
-        // Start auto-refresh timers (every 10 minutes)
-        startQuotaRefreshTimer()
-        startCostTimer()
+        // Start auto-refresh timer (every 10 minutes)
+        startDataRefreshTimer()
     }
 
     // MARK: - Deinitialization
 
     deinit {
-        quotaTimer?.invalidate()
-        costTimer?.invalidate()
+        dataRefreshTimer?.invalidate()
     }
 
-    // MARK: - Quota Refresh
+    // MARK: - Data Refresh
+
+    /// Refresh all data (quotas, costs, etc.)
+    func refreshAllData() {
+        refreshQuotas()
+        refreshClaudeConsoleCost()
+        // Add more data refresh here in the future
+    }
 
     /// Refresh quotas for all providers
-    func refreshAllQuotas() {
+    func refreshQuotas() {
         refreshZhipuQuotas()
         // Add other provider quota refresh here in the future
     }
 
-    /// Start quota refresh timer (every 10 minutes)
-    func startQuotaRefreshTimer() {
-        quotaTimer?.invalidate()
+    /// Start data refresh timer (every 10 minutes)
+    func startDataRefreshTimer() {
+        dataRefreshTimer?.invalidate()
 
-        quotaTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in
-            self?.refreshAllQuotas()
+        dataRefreshTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in
+            self?.refreshAllData()
         }
     }
 }

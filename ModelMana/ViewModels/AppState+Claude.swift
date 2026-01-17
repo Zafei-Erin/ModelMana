@@ -93,13 +93,4 @@ extension AppState {
             }
         }
     }
-
-    /// Start cost timer (refresh every 10 minutes)
-    func startCostTimer() {
-        costTimer?.invalidate()
-
-        costTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in
-            self?.refreshClaudeConsoleCost()
-        }
-    }
 }

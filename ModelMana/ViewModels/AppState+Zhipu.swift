@@ -45,7 +45,7 @@ extension AppState {
         }
     }
 
-    /// Refresh Zhipu provider API Key quotas
+    /// Refresh Zhipu API Key quotas
     func refreshZhipuQuotas() {
         // Find all zhipu provider API keys
         for provider in configuration.providers {
