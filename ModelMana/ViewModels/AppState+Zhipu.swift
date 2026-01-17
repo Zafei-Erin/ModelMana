@@ -1,5 +1,5 @@
 //
-//  AppState+Quota.swift
+//  AppState+Zhipu.swift
 //  ModelMana
 //
 //  Created by refactoring from AppState.swift
@@ -8,7 +8,7 @@
 import SwiftUI
 
 extension AppState {
-    // MARK: - Quota Management
+    // MARK: - Zhipu Quota Management
 
     /// Get quota for specified API Key
     func getQuota(for apiKeyId: String) -> ApiKeyQuota {
