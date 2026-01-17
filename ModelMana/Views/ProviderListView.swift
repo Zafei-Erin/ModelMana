@@ -213,6 +213,9 @@ struct ProviderListView: View {
             newConfig.selectedApiKeyId = apiKeyId
             AppState.shared.configuration = newConfig
 
+            // Persist configuration to disk
+            try? ConfigService.saveConfiguration(newConfig)
+
             // Track credential type if this is Claude
             if providerConfig.id == "claude" {
                 AppState.shared.selectedClaudeCredential = .manualKey(apiKeyId)
@@ -335,7 +338,6 @@ struct ActiveKeySection: View {
                 rightSideInfo(for: credential)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var displayName: String {
@@ -376,7 +378,6 @@ struct ActiveKeySection: View {
                     HStack(spacing: 6) {
                         ProgressView(value: percentage / 100, total: 1.0)
                             .progressViewStyle(BlackProgressStyle())
-                            .frame(width: 50)
 
                         Text("\(Int(percentage))%")
                             .font(.system(size: 11))
@@ -399,11 +400,11 @@ struct ActiveKeySection: View {
     private var subscriptionRightSideInfo: some View {
         VStack(alignment: .trailing, spacing: 2) {
             if let usage = AppState.shared.subscriptionUsage,
-               let fiveHour = usage.fiveHour {
+                let fiveHour = usage.fiveHour
+            {
                 HStack(spacing: 6) {
                     ProgressView(value: (fiveHour.utilization ?? 0) / 100, total: 1.0)
                         .progressViewStyle(BlackProgressStyle())
-                        .frame(width: 50)
 
                     if let utilization = fiveHour.utilization {
                         Text("\(Int(utilization))%")
@@ -412,7 +413,8 @@ struct ActiveKeySection: View {
                     }
                 }
                 if let resetsAt = fiveHour.resetsAt,
-                   let date = ClaudeOAuthUsageFetcher.parseISO8601Date(resetsAt) {
+                    let date = ClaudeOAuthUsageFetcher.parseISO8601Date(resetsAt)
+                {
                     Text(resetsInText(date))
                         .font(.system(size: 8))
                         .foregroundStyle(.secondary)
@@ -806,8 +808,9 @@ struct ClaudeDropdownPanel: View {
     }
 
     private func apiKeyCard(for key: ApiKeyConfig) -> some View {
-        let isSelected = selectedCredential?.isManualKey(selectedId: selectedApiKeyId) == true &&
-                        selectedApiKeyId == key.id
+        let isSelected =
+            selectedCredential?.isManualKey(selectedId: selectedApiKeyId) == true
+            && selectedApiKeyId == key.id
         let quota = AppState.shared.getQuota(for: key.id)
         var progressValue: Double?
         var progressText: String?
