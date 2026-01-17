@@ -7,6 +7,14 @@
 
 import SwiftUI
 
+// MARK: - Claude Credential Type
+
+enum ClaudeCredentialType: Equatable {
+    case manualKey(String)  // apiKeyId
+    case subscription
+    case console
+}
+
 @Observable
 class AppState {
     static let shared = AppState()
@@ -23,6 +31,15 @@ class AppState {
     var claudeConsoleMetrics: ClaudeConsoleMetricsResponse?
     var costLoadingState: CostLoadingState = .idle
     var lastCostUpdate: Date?
+
+    // Track which Claude credential type is currently selected
+    var selectedClaudeCredential: ClaudeCredentialType? = nil
+
+    // Track subscription usage (for display in dropdown)
+    var subscriptionUsage: ClaudeOAuthUsageResponse? = nil
+
+    // Track subscription login status separately
+    var isSubscriptionLoggedIn: Bool = false
 
     private var quotaTimer: Timer?
     private var costTimer: Timer?
@@ -128,6 +145,41 @@ class AppState {
                 // Success - update state
                 Task { @MainActor in
                     claudeLoginState.phase = .success
+
+                    // Set selected credential and update configuration
+                    switch method {
+                    case .subscription:
+                        selectedClaudeCredential = .subscription
+                        isSubscriptionLoggedIn = true
+                        // Update configuration to reflect Claude as current provider
+                        var newConfig = configuration
+                        newConfig.selectedProviderId = "claude"
+                        newConfig.selectedApiKeyId = nil  // No API key for subscription
+                        configuration = newConfig
+                        // Save configuration
+                        try? ConfigService.saveConfiguration(newConfig)
+                        // Fetch usage for display
+                        do {
+                            let usage = try await ClaudeSessionService.refreshUsage()
+                            subscriptionUsage = usage
+                        } catch {
+                            print("[AppState] Failed to fetch subscription usage: \(error)")
+                        }
+                    case .console:
+                        selectedClaudeCredential = .console
+                        // Update configuration to reflect Claude as current provider
+                        var newConfig = configuration
+                        newConfig.selectedProviderId = "claude"
+                        newConfig.selectedApiKeyId = nil  // No API key for console
+                        configuration = newConfig
+                        // Save configuration
+                        try? ConfigService.saveConfiguration(newConfig)
+                        // Refresh console cost
+                        refreshClaudeConsoleCost()
+                    }
+
+                    // Write keychain auth settings
+                    try? SettingsFileService.writeKeychainAuthSettings()
                 }
                 print("[AppState] Login completed successfully")
             } catch {
