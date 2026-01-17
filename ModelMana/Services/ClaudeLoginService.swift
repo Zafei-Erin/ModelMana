@@ -137,6 +137,7 @@ final class ClaudeLoginService {
 
         // Stop when logout succeeds
         options.stopOnSubstrings = [
+            "Successfully logged out from your Anthropic account",
             "Logged out successfully",
             "Successfully logged out",
             "You have been logged out"

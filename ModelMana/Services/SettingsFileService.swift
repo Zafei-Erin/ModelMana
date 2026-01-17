@@ -194,6 +194,8 @@ struct SettingsFileService {
             do {
                 try await ClaudeLoginService.shared.startLogout()
                 print("[SettingsFileService] Claude logout completed successfully")
+                // Restore onboarding flag after logout completes
+                try? configureClaudeJson()
             } catch {
                 print("[SettingsFileService] Claude logout failed: \(error.localizedDescription)")
                 // Logout failure is not critical - settings.json will be updated anyway
