@@ -47,12 +47,14 @@ final class ClaudeLoginService {
         if method == .subscription {
             // Option 1 is already selected, just press Enter
             options.sendOnSubstrings = [
+                "Yes, proceed": "\r",  // Auto-confirm folder trust prompt
                 "Select login method:": "\r"
             ]
             print("[ClaudeLoginService] Subscription mode: will send Enter on 'Select login method:'")
         } else {
             // For console (option 2), press Down arrow first, then Enter when we see option 2 highlighted
             options.sendOnSubstrings = [
+                "Yes, proceed": "\r",  // Auto-confirm folder trust prompt
                 "Select login method:": "\u{1B}[B",           // Down arrow (ESC[B) to move to option 2
                 "Anthropic Console account": "\r"            // Press Enter when option 2 is shown
             ]
