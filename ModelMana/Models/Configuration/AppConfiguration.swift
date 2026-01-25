@@ -40,4 +40,20 @@ struct AppConfiguration: Codable {
         self.selectedProviderId = selectedProviderId
         self.selectedApiKeyId = selectedApiKeyId
     }
+
+    /// Subscript for accessing provider by id
+    subscript(id: String) -> ProviderConfig? {
+        get { providers.first { $0.id == id } }
+        set {
+            if let index = providers.firstIndex(where: { $0.id == id }) {
+                if let newValue = newValue {
+                    providers[index] = newValue
+                } else {
+                    providers.remove(at: index)
+                }
+            } else if let newValue = newValue {
+                providers.append(newValue)
+            }
+        }
+    }
 }

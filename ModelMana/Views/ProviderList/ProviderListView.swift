@@ -211,13 +211,14 @@ struct ProviderListView: View {
                     "[ModelMana] Switching from subscription to \(providerConfig.id), deleting keychain"
                 )
                 SettingsFileService.deleteClaudeKeychainEntry()
-                AppState.shared.isSubscriptionLoggedIn = false
+                AppState.shared.selectedClaudeCredential = nil
             }
         } else if case .console = currentCredential {
             if providerConfig.id != "claude" {
                 print(
                     "[ModelMana] Switching from console to \(providerConfig.id), deleting keychain")
                 SettingsFileService.deleteClaudeKeychainEntry()
+                AppState.shared.selectedClaudeCredential = nil
             }
         }
 
@@ -346,6 +347,7 @@ struct ProviderListView: View {
     }
 
     private func selectSubscription() {
+        print("[ProviderListView] selectSubscription called")
         AppState.shared.startClaudeLogin(method: .subscription)
     }
 

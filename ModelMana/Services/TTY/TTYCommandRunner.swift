@@ -337,7 +337,9 @@ public struct TTYCommandRunner {
         proc.environment = env
 
         // Start process
+        print("[TTYCommandRunner] About to call proc.run() for binary: \(resolved)")
         try proc.run()
+        print("[TTYCommandRunner] proc.run() succeeded, PID: \(proc.processIdentifier)")
         didLaunch = true
 
         // Create process group
@@ -385,16 +387,33 @@ public struct TTYCommandRunner {
         let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var buffer = Data()
+        var readCallCount = 0
         func readChunk() -> Data {
             var appended = Data()
             while true {
                 var tmp = [UInt8](repeating: 0, count: 8192)
                 let n = read(primaryFD, &tmp, tmp.count)
+                readCallCount += 1
                 if n > 0 {
+                    if readCallCount <= 3 {
+                        print("[TTYCommandRunner] read() returned \(n) bytes")
+                    }
                     let slice = tmp.prefix(n)
                     buffer.append(contentsOf: slice)
                     appended.append(contentsOf: slice)
                     continue
+                }
+                if readCallCount <= 3 {
+                    if n == 0 {
+                        print("[TTYCommandRunner] read() returned 0 (EOF)")
+                    } else {
+                        let err = errno
+                        print("[TTYCommandRunner] read() returned \(n), errno: \(err) (\(String(cString: strerror(errno))))")
+                    }
+                }
+                // No data available - brief pause to avoid busy-wait
+                if appended.isEmpty {
+                    usleep(1000)  // 1ms
                 }
                 break
             }
@@ -428,9 +447,20 @@ public struct TTYCommandRunner {
         }
 
         // Main read loop
+        print("[TTYCommandRunner] Entering main read loop, deadline: \(deadline)")
+        var iterationCount = 0
         while Date() < deadline {
+            iterationCount += 1
+            if iterationCount % 100 == 0 {
+                print("[TTYCommandRunner] Read loop iteration \(iterationCount), proc.isRunning: \(proc.isRunning)")
+            }
             let newData = readChunk()
-            if !newData.isEmpty, let chunkText = String(bytes: newData, encoding: .utf8) {
+            if newData.isEmpty {
+                // No data received - small delay before retry
+                usleep(1000)  // 1ms
+                continue
+            }
+            if let chunkText = String(bytes: newData, encoding: .utf8) {
                 recentText += chunkText
                 if recentText.count > 8192 {
                     recentText.removeFirst(recentText.count - 8192)

@@ -1,28 +1,21 @@
 //
-//  ClaudeDropdownPanel.swift
+//  ClaudeProviderPanel.swift
 //  ModelMana
 //
-//  Created by refactoring from ProviderListView
+//  Claude provider dropdown panel
 //
 
 import SwiftUI
 
-struct ClaudeDropdownPanel: View {
-    let provider: ProviderConfig
-    let onSelectApiKey: (String) -> Void
-    let onSelectSubscription: () -> Void
-    let onSelectConsole: () -> Void
+struct ClaudeProviderPanel: View {
+    @ObservedProvider private var provider: ClaudeProvider
+
+    init(provider: ClaudeProvider) {
+        self.provider = provider
+    }
 
     private var selectedApiKeyId: String? {
-        AppState.shared.configuration.selectedApiKeyId
-    }
-
-    private var selectedCredential: ClaudeCredentialType? {
-        AppState.shared.selectedClaudeCredential
-    }
-
-    private var loginState: ClaudeLoginState {
-        AppState.shared.claudeLoginState
+        ProviderRegistry.shared.configuration.selectedApiKeyId
     }
 
     var body: some View {
@@ -53,10 +46,10 @@ struct ClaudeDropdownPanel: View {
 
     @ViewBuilder
     private var apiKeyCardsSection: some View {
-        if provider.apiKeys.isEmpty {
+        if provider.config.apiKeys.isEmpty {
             emptyApiKeysCard
         } else {
-            ForEach(provider.apiKeys, id: \.id) { key in
+            ForEach(provider.config.apiKeys, id: \.id) { key in
                 apiKeyCard(for: key)
             }
         }
@@ -76,10 +69,9 @@ struct ClaudeDropdownPanel: View {
     }
 
     private func apiKeyCard(for key: ApiKeyConfig) -> some View {
-        let isSelected =
-            selectedCredential?.isManualKey(selectedId: selectedApiKeyId) == true
+        let isSelected = provider.selectedCredential?.isManualKey(selectedId: selectedApiKeyId) == true
             && selectedApiKeyId == key.id
-        let quota = AppState.shared.getQuota(for: key.id)
+        let quota = provider.quota(for: key.id)
         var progressValue: Double?
         var progressText: String?
 
@@ -97,7 +89,7 @@ struct ClaudeDropdownPanel: View {
             actionType: .checkmark,
             isLoading: false,
             action: {
-                onSelectApiKey(key.id)
+                selectApiKey(key.id)
             }
         )
     }
@@ -110,36 +102,40 @@ struct ClaudeDropdownPanel: View {
             subtitle: subscriptionCardSubtitle,
             progressValue: subscriptionProgressValue,
             progressText: subscriptionProgressText,
-            isSelected: selectedCredential == .subscription,
+            isSelected: provider.selectedCredential == .subscription,
             actionType: .chevron,
-            isLoading: loginState.isProcessing && loginState.method == .subscription,
-            action: onSelectSubscription
+            isLoading: provider.loginState.isProcessing && provider.loginState.method == .subscription,
+            action: {
+                provider.startLogin(method: .subscription)
+            }
         )
     }
 
     private var subscriptionCardSubtitle: String {
-        if AppState.shared.isSubscriptionLoggedIn {
+        if isSubscriptionLoggedIn {
             return "Pro, Max, Team, or Enterprise"
         }
         return "Login to use your subscription"
     }
 
     private var subscriptionProgressValue: Double? {
-        guard AppState.shared.isSubscriptionLoggedIn,
-            let usage = AppState.shared.subscriptionUsage?.fiveHour?.utilization
-        else {
+        guard isSubscriptionLoggedIn,
+              let usage = provider.subscriptionUsage?.fiveHour?.utilization else {
             return nil
         }
         return usage
     }
 
     private var subscriptionProgressText: String? {
-        guard AppState.shared.isSubscriptionLoggedIn,
-            let usage = AppState.shared.subscriptionUsage?.fiveHour?.utilization
-        else {
+        guard isSubscriptionLoggedIn,
+              let usage = provider.subscriptionUsage?.fiveHour?.utilization else {
             return nil
         }
         return "\(Int(usage))%"
+    }
+
+    private var isSubscriptionLoggedIn: Bool {
+        ClaudeSessionService.isLoggedIn()
     }
 
     // MARK: - Console Card
@@ -148,26 +144,47 @@ struct ClaudeDropdownPanel: View {
         ClaudeCredentialCard(
             title: "Console",
             subtitle: consoleCardSubtitle,
-            progressValue: nil,  // Console shows cost, not percentage
+            progressValue: nil,
             progressText: consoleCostText,
-            isSelected: selectedCredential == .console,
+            isSelected: provider.selectedCredential == .console,
             actionType: .chevron,
-            isLoading: loginState.isProcessing && loginState.method == .console,
-            action: onSelectConsole
+            isLoading: provider.loginState.isProcessing && provider.loginState.method == .console,
+            action: {
+                provider.startLogin(method: .console)
+            }
         )
     }
 
     private var consoleCardSubtitle: String {
-        if AppState.shared.claudeConsoleMetrics != nil {
+        if provider.consoleMetrics != nil {
             return "API usage billing"
         }
         return "Login to track console costs"
     }
 
     private var consoleCostText: String? {
-        guard let metrics = AppState.shared.claudeConsoleMetrics else {
+        guard let metrics = provider.consoleMetrics else {
             return nil
         }
         return metrics.formattedCost
+    }
+
+    // MARK: - Actions
+
+    private func selectApiKey(_ apiKeyId: String) {
+        provider.selectedCredential = .manualKey(apiKeyId)
+        ProviderRegistry.shared.selectApiKey(apiKeyId)
+        ProviderRegistry.shared.selectProvider(provider.id)
+    }
+}
+
+// MARK: - ClaudeCredentialType Helper Extension
+
+extension ClaudeCredentialType {
+    func isManualKey(selectedId: String?) -> Bool {
+        if case .manualKey(let id) = self {
+            return id == selectedId
+        }
+        return false
     }
 }
