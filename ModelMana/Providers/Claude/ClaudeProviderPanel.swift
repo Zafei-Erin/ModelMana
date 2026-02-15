@@ -18,6 +18,10 @@ struct ClaudeProviderPanel: View {
         ProviderRegistry.shared.configuration.selectedApiKeyId
     }
 
+    private var isSubscriptionLoggedIn: Bool {
+        AppState.shared.isSubscriptionLoggedIn
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -132,10 +136,6 @@ struct ClaudeProviderPanel: View {
             return nil
         }
         return "\(Int(usage))%"
-    }
-
-    private var isSubscriptionLoggedIn: Bool {
-        ClaudeSessionService.isLoggedIn()
     }
 
     // MARK: - Console Card
