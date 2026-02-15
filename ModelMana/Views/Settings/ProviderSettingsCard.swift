@@ -245,11 +245,9 @@ struct ProviderSettingsCard: View {
                 baseUrl: providerConfig.baseUrl,
                 apiKey: apiKeyConfig.key
             )
-            print("[ModelMana] ✅ Synced updated API key to Claude settings")
+            Logger.success("Settings", "API key synced")
         } catch {
-            print(
-                "[ModelMana] ❌ WARNING: Failed to sync Claude settings: \(error.localizedDescription)"
-            )
+            Logger.error("Settings", "Failed to sync: \(error.localizedDescription)")
         }
     }
 

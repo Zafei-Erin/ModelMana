@@ -48,24 +48,19 @@ struct SettingsFileService {
     /// 写入 Claude settings.json
     static func writeSettings(baseUrl: String, apiKey: String) throws {
         let path = settingsPath
-        print("[SettingsFileService] writeSettings called")
-        print("[SettingsFileService] Target path: \(path.path)")
 
         // 确保目录存在
         let directory = path.deletingLastPathComponent()
         if !FileManager.default.fileExists(atPath: directory.path) {
-            print("[SettingsFileService] Creating directory: \(directory.path)")
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
 
         // 读取现有配置
         var existing: [String: Any] = [:]
         if FileManager.default.fileExists(atPath: path.path) {
-            print("[SettingsFileService] Reading existing settings file")
             let data = try Data(contentsOf: path)
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 existing = json
-                print("[SettingsFileService] Existing settings loaded: \(existing.keys)")
             }
         }
 
@@ -77,12 +72,11 @@ struct SettingsFileService {
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 1
         ]
 
-        print("[SettingsFileService] Writing env: baseURL=\(baseUrl), apiKey=\(apiKey.prefix(10))...")
+        Logger.log("Settings", "Updated")
 
         // 写入文件
         let newData = try JSONSerialization.data(withJSONObject: existing, options: .prettyPrinted)
         try newData.write(to: path)
-        print("[SettingsFileService] Settings written successfully")
 
         // 配置 claude.json
         try configureClaudeJson()
@@ -92,7 +86,6 @@ struct SettingsFileService {
     /// This removes auth tokens from env to allow Claude CLI to use Keychain credentials
     static func writeKeychainAuthSettings() throws {
         let path = settingsPath
-        print("[SettingsFileService] writeKeychainAuthSettings called")
 
         // Ensure directory exists
         let directory = path.deletingLastPathComponent()
@@ -121,7 +114,6 @@ struct SettingsFileService {
         // Write file
         let newData = try JSONSerialization.data(withJSONObject: existing, options: .prettyPrinted)
         try newData.write(to: path)
-        print("[SettingsFileService] Keychain auth settings written")
 
         // Configure claude.json
         try configureClaudeJson()
@@ -130,7 +122,6 @@ struct SettingsFileService {
     /// 配置 ~/.claude.json，跳过 onboarding
     static func configureClaudeJson() throws {
         let path = claudeJsonPath
-        print("[SettingsFileService] configureClaudeJson called, path: \(path.path)")
 
         // 读取现有配置
         var existing: [String: Any] = [:]
@@ -146,59 +137,44 @@ struct SettingsFileService {
         // 写入文件
         let newData = try JSONSerialization.data(withJSONObject: existing, options: .prettyPrinted)
         try newData.write(to: path)
-        print("[SettingsFileService] Claude JSON configured successfully")
     }
 
     /// 获取当前配置的 baseURL
     static func getCurrentBaseUrl() -> String? {
         let path = settingsPath
-        print("[SettingsFileService] getCurrentBaseUrl called, path: \(path.path)")
 
         guard FileManager.default.fileExists(atPath: path.path) else {
-            print("[SettingsFileService] Settings file does not exist")
             return nil
         }
 
         guard let data = try? Data(contentsOf: path) else {
-            print("[SettingsFileService] Failed to read settings file")
             return nil
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("[SettingsFileService] Failed to parse JSON")
             return nil
         }
 
         guard let env = json["env"] as? [String: Any] else {
-            print("[SettingsFileService] No 'env' key in settings")
             return nil
         }
 
-        guard let baseURL = env["ANTHROPIC_BASE_URL"] as? String else {
-            print("[SettingsFileService] No 'ANTHROPIC_BASE_URL' in env")
-            return nil
-        }
-
-        print("[SettingsFileService] Current baseURL: \(baseURL)")
-        return baseURL
+        return env["ANTHROPIC_BASE_URL"] as? String
     }
 
     /// Delete Claude Code keychain entry
     /// Called when switching away from Claude subscription/console login
     /// Uses `claude /logout` to let Claude CLI clean up its own credentials
     static func deleteClaudeKeychainEntry() {
-        print("[SettingsFileService] deleteClaudeKeychainEntry called - using claude /logout")
-
         // Run logout asynchronously
         Task {
             do {
                 try await ClaudeLoginService.shared.startLogout()
-                print("[SettingsFileService] Claude logout completed successfully")
+                Logger.log("Settings", "Logged out")
                 // Restore onboarding flag after logout completes
                 try? configureClaudeJson()
             } catch {
-                print("[SettingsFileService] Claude logout failed: \(error.localizedDescription)")
-                // Logout failure is not critical - settings.json will be updated anyway
+                Logger.error("Settings", "Logout failed: \(error.localizedDescription)")
             }
         }
     }

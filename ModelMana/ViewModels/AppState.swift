@@ -60,9 +60,10 @@ class AppState {
         ProviderRegistry.shared.claude.subscriptionUsage
     }
 
-    /// Subscription login status
+    /// Subscription login status (tracked state, not computed)
     var isSubscriptionLoggedIn: Bool {
-        ClaudeSessionService.isLoggedIn()
+        get { ProviderRegistry.shared.claude.isSubscriptionLoggedIn }
+        set { ProviderRegistry.shared.claude.isSubscriptionLoggedIn = newValue }
     }
 
     /// Claude Console cost metrics
@@ -163,7 +164,6 @@ class AppState {
 
     /// Start Claude login
     func startClaudeLogin(method: ClaudeLoginMethod) {
-        print("[AppState] startClaudeLogin called with method: \(method.displayName)")
         ProviderRegistry.shared.claude.startLogin(method: method)
     }
 

@@ -31,8 +31,6 @@ enum ClaudeConsoleCostService {
         let nextYear = month == 12 ? year + 1 : year
         let endDateStr = String(format: "%04d-%02d-01", nextYear, nextMonth)
 
-        print("[ClaudeConsoleCostService] Date range: \(startDateStr) to \(endDateStr)")
-
         return try await fetchMetrics(startDateStr: startDateStr, endDateStr: endDateStr)
     }
 

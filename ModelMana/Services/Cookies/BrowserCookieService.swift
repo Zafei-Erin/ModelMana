@@ -59,7 +59,6 @@ enum BrowserCookieService {
         if let cached = cached, !cached.isEmpty {
             // Check if cache has the required cookie
             if cached[requiredCookie] != nil {
-                print("[BrowserCookieService] Using cached cookies")
                 return cached
             }
         }
@@ -71,15 +70,12 @@ enum BrowserCookieService {
 
                 // Check if this browser has the required cookie
                 if cookies[requiredCookie] != nil {
-                    print("[BrowserCookieService] Using cookies from \(browser.displayName)")
                     // Cache the results
                     await setCachedCookies(cookies, for: domain, storeIdentifier: storeIdentifier)
                     return cookies
-                } else {
-                    print("[BrowserCookieService] \(browser.displayName) missing required cookie '\(requiredCookie)'")
                 }
             } catch {
-                print("[BrowserCookieService] Failed to fetch from \(browser.displayName): \(error.localizedDescription)")
+                // Continue to next browser
             }
         }
 
@@ -102,29 +98,14 @@ enum BrowserCookieService {
             try client.records(matching: query, in: browser)
         }.value
 
-        print("[BrowserCookieService] \(browser.displayName): Found \(storeRecords.count) cookie stores")
-
         // Collect all cookies from all stores
         var allCookies: [String: String] = [:]
         for storeRecord in storeRecords {
-            print("[BrowserCookieService]   Store '\(storeRecord.label)' has \(storeRecord.records.count) cookies")
             for record in storeRecord.records {
                 if allCookies[record.name] == nil {  // First occurrence wins
                     allCookies[record.name] = record.value
                 }
             }
-        }
-
-        // Log ALL cookies found (for debugging)
-        print("[BrowserCookieService]   ALL cookies: \(Array(allCookies.keys).sorted().joined(separator: ", "))")
-
-        // Log what we found
-        let foundCookies = cookieNames.filter { allCookies[$0] != nil }
-        let missingCookies = cookieNames.filter { allCookies[$0] == nil }
-        print("[BrowserCookieService]   Requested: \(cookieNames.joined(separator: ", "))")
-        print("[BrowserCookieService]   Found: \(foundCookies.joined(separator: ", "))")
-        if !missingCookies.isEmpty {
-            print("[BrowserCookieService]   Missing: \(missingCookies.joined(separator: ", "))")
         }
 
         // Return all matching cookies (may be partial)

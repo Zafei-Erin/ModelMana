@@ -21,6 +21,7 @@ class ClaudeProvider: AIProvider {
     var subscriptionUsage: ClaudeOAuthUsageResponse?
     var isSubscriptionLoading: Bool = false
     var lastSubscriptionUpdate: Date?
+    var isSubscriptionLoggedIn: Bool = false  // Tracked state, not computed
 
     // MARK: - Console State
 
@@ -45,11 +46,15 @@ class ClaudeProvider: AIProvider {
         for key in config.apiKeys {
             apiKeyQuotas[key.id] = ApiKeyQuota(status: .loading)
         }
+
+        // Check initial login status once
+        isSubscriptionLoggedIn = ClaudeSessionService.isLoggedIn()
     }
 
     // MARK: - Provider Protocol
 
     func refreshUsage() async {
+        Logger.log("Claude", "Refreshing...")
         // Refresh all active usage types in parallel
         async let _ = refreshSubscriptionUsage()
         async let _ = refreshConsoleCost()
@@ -67,9 +72,6 @@ class ClaudeProvider: AIProvider {
     // MARK: - Subscription
 
     private func refreshSubscriptionUsage() async {
-        // Only refresh if subscription is the selected credential
-        guard selectedCredential == .subscription else { return }
-
         isSubscriptionLoading = true
         defer { isSubscriptionLoading = false }
 
@@ -77,17 +79,19 @@ class ClaudeProvider: AIProvider {
             let usage = try await ClaudeSessionService.refreshUsage()
             subscriptionUsage = usage
             lastSubscriptionUpdate = Date()
+            if let utilization = usage.fiveHour?.utilization {
+                Logger.log("Claude", "Subscription: \(Int(utilization * 100))%")
+            }
+        } catch ClaudeOAuthFetchError.credentialsNotFound {
+            Logger.log("Claude", "Subscription: Not logged in")
         } catch {
-            print("[ClaudeProvider] Failed to refresh subscription usage: \(error)")
+            Logger.error("Claude", "Subscription: \(error.localizedDescription)")
         }
     }
 
     // MARK: - Console
 
     private func refreshConsoleCost() async {
-        // Only refresh if console is the selected credential
-        guard selectedCredential == .console else { return }
-
         isConsoleLoading = true
         costLoadingState = .loading
         defer {
@@ -99,18 +103,21 @@ class ClaudeProvider: AIProvider {
             consoleMetrics = metrics
             costLoadingState = .success
             lastConsoleUpdate = Date()
+            if let cost = metrics.totalCost {
+                Logger.log("Claude", "Console: $\(String(format: "%.2f", cost))")
+            } else {
+                Logger.log("Claude", "Console: No data")
+            }
+        } catch ClaudeCookieError.noBrowserFound {
+            Logger.log("Claude", "Console: No browser cookies")
         } catch {
-            print("[ClaudeProvider] Failed to refresh console cost: \(error)")
-            costLoadingState = .error(error.localizedDescription)
+            Logger.error("Claude", "Console: \(error.localizedDescription)")
         }
     }
 
     // MARK: - API Keys
 
     private func refreshApiKeysQuota() async {
-        // Only refresh if an API key is selected
-        guard case .manualKey = selectedCredential else { return }
-
         await withTaskGroup(of: Void.self) { group in
             for apiKey in config.apiKeys {
                 group.addTask {
@@ -134,63 +141,49 @@ class ClaudeProvider: AIProvider {
 
     /// Start Claude login
     func startLogin(method: ClaudeLoginMethod) {
-        print("[ClaudeProvider] startLogin called with method: \(method.displayName)")
-
         loginState = ClaudeLoginState(phase: .requesting, method: method)
 
         Task {
             do {
-                print("[ClaudeProvider] About to call ClaudeLoginService.shared.startLogin")
                 try await ClaudeLoginService.shared.startLogin(method: method) { [self] newPhase in
-                    print("[ClaudeProvider] Phase changed to: \(newPhase)")
                     Task { @MainActor in
                         loginState.phase = newPhase
                     }
                 }
-                print("[ClaudeProvider] startLogin completed, checking if logged in")
 
                 Task { @MainActor in
                     loginState.phase = .success
-                    print("[ClaudeProvider] Login phase set to success")
+                    Logger.success("Claude", "Logged in via \(method.displayName)")
 
                     switch method {
                     case .subscription:
                         selectedCredential = .subscription
+                        isSubscriptionLoggedIn = true
                         ProviderRegistry.shared.selectProvider(id)
-                        ProviderRegistry.shared.selectApiKey("")  // No API key for subscription
+                        ProviderRegistry.shared.selectApiKey("")
 
-                        // Fetch usage
                         do {
-                            print("[ClaudeProvider] Fetching subscription usage...")
                             let usage = try await ClaudeSessionService.refreshUsage()
                             subscriptionUsage = usage
-                            print("[ClaudeProvider] Subscription usage fetched")
                         } catch {
-                            print("[ClaudeProvider] Failed to fetch subscription usage: \(error)")
+                            Logger.error("Claude", "Failed to fetch usage")
                         }
 
                     case .console:
                         selectedCredential = .console
                         ProviderRegistry.shared.selectProvider(id)
-                        ProviderRegistry.shared.selectApiKey("")  // No API key for console
+                        ProviderRegistry.shared.selectApiKey("")
 
-                        // Refresh console cost
-                        print("[ClaudeProvider] Refreshing console cost...")
                         await refreshConsoleCost()
-                        print("[ClaudeProvider] Console cost refreshed")
                     }
 
-                    // Write keychain auth settings
                     try? SettingsFileService.writeKeychainAuthSettings()
-                    print("[ClaudeProvider] Keychain settings written")
                 }
             } catch let error as ClaudeLoginError {
-                print("[ClaudeProvider] Login error (ClaudeLoginError): \(error)")
                 Task { @MainActor in
                     loginState.phase = .failed(error.localizedDescription)
                 }
             } catch {
-                print("[ClaudeProvider] Login error (general): \(error.localizedDescription)")
                 Task { @MainActor in
                     loginState.phase = .failed(error.localizedDescription)
                 }

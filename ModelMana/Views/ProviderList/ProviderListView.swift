@@ -200,23 +200,15 @@ struct ProviderListView: View {
         }
 
         let currentCredential = AppState.shared.selectedClaudeCredential
-        print(
-            "[ModelMana] Current credential: \(String(describing: currentCredential)), switching to: \(providerConfig.id)"
-        )
 
         // If switching away from Claude subscription/console, delete keychain entry
         if case .subscription = currentCredential {
             if providerConfig.id != "claude" {
-                print(
-                    "[ModelMana] Switching from subscription to \(providerConfig.id), deleting keychain"
-                )
                 SettingsFileService.deleteClaudeKeychainEntry()
                 AppState.shared.selectedClaudeCredential = nil
             }
         } else if case .console = currentCredential {
             if providerConfig.id != "claude" {
-                print(
-                    "[ModelMana] Switching from console to \(providerConfig.id), deleting keychain")
                 SettingsFileService.deleteClaudeKeychainEntry()
                 AppState.shared.selectedClaudeCredential = nil
             }
@@ -243,9 +235,9 @@ struct ProviderListView: View {
                 AppState.shared.selectedClaudeCredential = nil
             }
 
-            print("[ModelMana] Selected: \(providerConfig.name) / \(apiKeyConfig.name)")
+            Logger.log("Provider", "Selected: \(providerConfig.name) / \(apiKeyConfig.name)")
         } catch {
-            print("[ModelMana] ERROR: \(error.localizedDescription)")
+            Logger.error("Provider", error.localizedDescription)
         }
     }
 
@@ -347,7 +339,6 @@ struct ProviderListView: View {
     }
 
     private func selectSubscription() {
-        print("[ProviderListView] selectSubscription called")
         AppState.shared.startClaudeLogin(method: .subscription)
     }
 

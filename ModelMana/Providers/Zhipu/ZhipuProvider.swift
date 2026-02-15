@@ -31,6 +31,9 @@ class ZhipuProvider: AIProvider {
     // MARK: - Provider Protocol
 
     func refreshUsage() async {
+        if !config.apiKeys.isEmpty {
+            Logger.log("Zhipu", "Refreshing...")
+        }
         // Refresh quota for each API key in parallel
         await withTaskGroup(of: Void.self) { group in
             for apiKey in config.apiKeys {
@@ -61,18 +64,16 @@ class ZhipuProvider: AIProvider {
         // Set to loading state first
         quotas[apiKey.id] = ApiKeyQuota(status: .loading)
 
-        print("[ZhipuProvider] 开始获取配额: \(apiKey.id.prefix(8))...")
-
         let result = await ZhipuQuotaService.fetchQuota(apiKey: apiKey.key)
 
         switch result {
         case .success(let data):
-            print("[ZhipuProvider] 配额获取成功: \(apiKey.id.prefix(8))..., \(data.percentage)%")
+            Logger.log("Zhipu", "Quota: \(data.percentage)%")
             quotas[apiKey.id] = ApiKeyQuota(
                 status: .success(percentage: data.percentage, nextResetTime: data.nextResetTime)
             )
         case .failure(let error):
-            print("[ZhipuProvider] 配额获取失败: \(apiKey.id.prefix(8))..., 错误: \(error.localizedDescription)")
+            Logger.error("Zhipu", error.localizedDescription)
             quotas[apiKey.id] = ApiKeyQuota(status: .error(error.localizedDescription))
         }
     }

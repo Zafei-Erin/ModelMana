@@ -22,23 +22,19 @@ struct ConfigService {
 
     /// 读取配置
     static func loadConfiguration() -> AppConfiguration {
-        print("[ConfigService] loadConfiguration, path: \(configPath.path)")
-
         if FileManager.default.fileExists(atPath: configPath.path) {
             do {
                 let data = try Data(contentsOf: configPath)
                 let config = try JSONDecoder().decode(AppConfiguration.self, from: data)
-                print("[ConfigService] Loaded \(config.providers.count) providers")
-                for p in config.providers {
-                    print("[ConfigService]   - \(p.name): id=\(p.id), \(p.apiKeys.count) keys")
-                }
+                let keyCounts = config.providers.map { "\($0.name): \($0.apiKeys.count) keys" }.joined(separator: ", ")
+                Logger.log("Config", "Loaded \(config.providers.count) providers (\(keyCounts))")
                 return config
             } catch {
-                print("[ConfigService] ERROR: \(error)")
+                Logger.error("Config", error.localizedDescription)
             }
         }
 
-        print("[ConfigService] Creating default config")
+        Logger.log("Config", "Creating default config")
         return createDefaultConfiguration()
     }
 
@@ -52,7 +48,6 @@ struct ConfigService {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
         try data.write(to: configPath)
-        print("[ConfigService] Config saved")
     }
 
     /// 创建默认配置（包含预置的 providers）

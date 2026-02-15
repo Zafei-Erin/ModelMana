@@ -337,9 +337,7 @@ public struct TTYCommandRunner {
         proc.environment = env
 
         // Start process
-        print("[TTYCommandRunner] About to call proc.run() for binary: \(resolved)")
         try proc.run()
-        print("[TTYCommandRunner] proc.run() succeeded, PID: \(proc.processIdentifier)")
         didLaunch = true
 
         // Create process group
@@ -395,21 +393,10 @@ public struct TTYCommandRunner {
                 let n = read(primaryFD, &tmp, tmp.count)
                 readCallCount += 1
                 if n > 0 {
-                    if readCallCount <= 3 {
-                        print("[TTYCommandRunner] read() returned \(n) bytes")
-                    }
                     let slice = tmp.prefix(n)
                     buffer.append(contentsOf: slice)
                     appended.append(contentsOf: slice)
                     continue
-                }
-                if readCallCount <= 3 {
-                    if n == 0 {
-                        print("[TTYCommandRunner] read() returned 0 (EOF)")
-                    } else {
-                        let err = errno
-                        print("[TTYCommandRunner] read() returned \(n), errno: \(err) (\(String(cString: strerror(errno))))")
-                    }
                 }
                 // No data available - brief pause to avoid busy-wait
                 if appended.isEmpty {
@@ -447,13 +434,9 @@ public struct TTYCommandRunner {
         }
 
         // Main read loop
-        print("[TTYCommandRunner] Entering main read loop, deadline: \(deadline)")
         var iterationCount = 0
         while Date() < deadline {
             iterationCount += 1
-            if iterationCount % 100 == 0 {
-                print("[TTYCommandRunner] Read loop iteration \(iterationCount), proc.isRunning: \(proc.isRunning)")
-            }
             let newData = readChunk()
             if newData.isEmpty {
                 // No data received - small delay before retry
@@ -475,14 +458,11 @@ public struct TTYCommandRunner {
                 let matched = scanData.range(of: item.needle) != nil ||
                     recentText.contains(needleString)
                 if matched {
-                    let responseDesc = String(data: item.response, encoding: .utf8)?.debugDescription ?? "?"
-                    print("[TTYCommandRunner] Matched '\(needleString)', sending: \(responseDesc)")
                     try? writeAll(item.response)
                     triggeredSends.insert(item.needle)
 
                     // Check if there's a delay configured for this pattern
                     if let delay = options.sendDelays[needleString], delay > 0 {
-                        print("[TTYCommandRunner] Waiting \(delay)s after sending '\(needleString)'")
                         usleep(UInt32(delay * 1_000_000))
                     }
                 }

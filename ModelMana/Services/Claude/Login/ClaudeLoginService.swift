@@ -49,7 +49,6 @@ final class ClaudeLoginService {
             options.sendOnSubstrings = [
                 "Select login method:": "\r"
             ]
-            print("[ClaudeLoginService] Subscription mode: will send Enter on 'Select login method:'")
         } else {
             // For console (option 2), press Down arrow first, then Enter when we see option 2 highlighted
             options.sendOnSubstrings = [
@@ -60,7 +59,6 @@ final class ClaudeLoginService {
             options.sendDelays = [
                 "Select login method:": 0.15  // Wait 150ms for cursor to move
             ]
-            print("[ClaudeLoginService] Console mode: will send Down arrow then Enter with delay")
         }
 
         do {
@@ -77,30 +75,18 @@ final class ClaudeLoginService {
             let output = result.text
             let hasSuccess = options.stopOnSubstrings.contains { output.contains($0) }
 
-            print("[ClaudeLoginService] CLI output length: \(output.count)")
-            print("[ClaudeLoginService] Found success substring: \(hasSuccess)")
-            if !hasSuccess {
-                print("[ClaudeLoginService] Output preview: \(output.prefix(500))")
-            }
-
             if hasSuccess {
                 // Check if actually logged in by verifying credentials
                 ClaudeSessionService.invalidateCache()
-
-                print("[ClaudeLoginService] Checking if logged in...")
-                let loggedIn = ClaudeSessionService.isLoggedIn()
-                print("[ClaudeLoginService] isLoggedIn result: \(loggedIn)")
 
                 if ClaudeSessionService.isLoggedIn() {
                     // Fetch and cache usage after successful login
                     do {
                         let creds = try ClaudeSessionService.loadCredentials()
                         let usage = try await ClaudeOAuthUsageFetcher.fetchUsage(accessToken: creds.accessToken)
-                        // Store usage in a shared location for UI to access
                         ClaudeSessionService.lastUsage = usage
                     } catch {
                         // Login succeeded but usage fetch failed - still consider login successful
-                        print("[ClaudeLoginService] Usage fetch failed after login: \(error.localizedDescription)")
                     }
                     return  // Success
                 } else {
@@ -123,8 +109,6 @@ final class ClaudeLoginService {
     /// Runs `claude /logout` to let Claude CLI clean up its own credentials
     /// - Returns: Async throws - success or error
     func startLogout() async throws {
-        print("[ClaudeLoginService] Starting logout via CLI")
-
         let runner = TTYCommandRunner()
         var options = TTYCommandRunner.Options(
             rows: 50,
@@ -156,16 +140,12 @@ final class ClaudeLoginService {
             let hasSuccess = options.stopOnSubstrings.contains { output.contains($0) }
 
             if hasSuccess {
-                print("[ClaudeLoginService] Logout completed successfully")
-                // Invalidate cache after logout
+                Logger.success("Claude", "Logged out")
                 ClaudeSessionService.invalidateCache()
             } else {
                 // Even if we don't see the success message, logout might have worked
-                // Check if we're now logged out
                 if !ClaudeSessionService.isLoggedIn() {
-                    print("[ClaudeLoginService] Logout verified (no longer logged in)")
-                } else {
-                    print("[ClaudeLoginService] Logout may not have completed, but continuing...")
+                    Logger.success("Claude", "Logged out")
                 }
             }
         } catch TTYCommandRunner.Error.binaryNotFound {
@@ -240,42 +220,32 @@ struct ClaudeSessionService {
         if let cached = cachedCredentials,
            let timestamp = cacheTimestamp,
            Date().timeIntervalSince(timestamp) < cacheValidityDuration {
-            print("[ClaudeSessionService] Returning cached credentials")
             return cached
         }
 
         // Try Keychain first (CLI writes there on macOS)
-        print("[ClaudeSessionService] Trying to load from Keychain...")
         var lastError: Error?
         if let keychainData = try? loadFromKeychain() {
-            print("[ClaudeSessionService] Keychain data found, size: \(keychainData.count) bytes")
-            print("[ClaudeSessionService] Raw data preview: \(String(data: keychainData.prefix(200), encoding: .utf8) ?? "not UTF8")")
             do {
                 let creds = try parseCredentials(data: keychainData)
                 cachedCredentials = creds
                 cacheTimestamp = Date()
-                print("[ClaudeSessionService] Credentials loaded from Keychain successfully")
+                Logger.log("Claude", "Credentials loaded from Keychain")
                 return creds
             } catch {
-                print("[ClaudeSessionService] Failed to parse Keychain data: \(error)")
                 lastError = error
             }
-        } else {
-            print("[ClaudeSessionService] No Keychain data found")
         }
 
         // Fallback to file
-        print("[ClaudeSessionService] Trying to load from file: \(getCredentialsPath().path)")
         do {
             let fileData = try loadFromFile()
-            print("[ClaudeSessionService] File data found, size: \(fileData.count) bytes")
             let creds = try parseCredentials(data: fileData)
             cachedCredentials = creds
             cacheTimestamp = Date()
-            print("[ClaudeSessionService] Credentials loaded from file successfully")
+            Logger.log("Claude", "Credentials loaded from file")
             return creds
         } catch {
-            print("[ClaudeSessionService] File load failed: \(error)")
             if let lastError = lastError { throw lastError }
             throw error
         }
@@ -286,10 +256,8 @@ struct ClaudeSessionService {
     static func isLoggedIn() -> Bool {
         do {
             let creds = try loadCredentials()
-            print("[ClaudeSessionService] Loaded credentials, isExpired: \(creds.isExpired)")
             return !creds.isExpired
         } catch {
-            print("[ClaudeSessionService] loadCredentials failed: \(error.localizedDescription)")
             return false
         }
     }
@@ -306,10 +274,10 @@ struct ClaudeSessionService {
         #if os(macOS)
         // List of possible service names to try
         let serviceNames = [
-            "Claude Code",                // Actual service name
-            "Claude Code-credentials",  // Current version
-            "claude-code",               // Alternative
-            "com.anthropic.claude-code", // Bundle ID style
+            "Claude Code",
+            "Claude Code-credentials",
+            "claude-code",
+            "com.anthropic.claude-code",
         ]
 
         // List of keychains to search
@@ -319,11 +287,6 @@ struct ClaudeSessionService {
             keychainDir + "/Claude Code.keychain",
             keychainDir + "/claude-code.keychain-db",
         ]
-
-        print("[ClaudeSessionService] Keychain dir: \(keychainDir)")
-        if let files = try? FileManager.default.contentsOfDirectory(atPath: keychainDir) {
-            print("[ClaudeSessionService] Keychain files: \(files.filter { $0.contains("Claude") || $0.contains("claude") })")
-        }
 
         // Try each combination of service name and keychain
         for service in serviceNames {
@@ -341,14 +304,13 @@ struct ClaudeSessionService {
                     let status = SecItemCopyMatching(query as CFDictionary, &result)
 
                     if status == errSecSuccess, let data = result as? Data, !data.isEmpty {
-                        print("[ClaudeSessionService] Found in keychain: \(keychainPath) with service: \(service)")
                         return data
                     }
                 }
             }
         }
 
-        // Fallback to default keychain search (searches all keychains) with different service names
+        // Fallback to default keychain search
         for service in serviceNames {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
@@ -361,12 +323,10 @@ struct ClaudeSessionService {
             let status = SecItemCopyMatching(query as CFDictionary, &result)
 
             if status == errSecSuccess, let data = result as? Data, !data.isEmpty {
-                print("[ClaudeSessionService] Found in default search with service: \(service)")
                 return data
             }
         }
 
-        print("[ClaudeSessionService] No credentials found in any keychain")
         throw ClaudeOAuthFetchError.credentialsNotFound
         #else
         throw ClaudeOAuthFetchError.credentialsNotFound
@@ -417,12 +377,11 @@ struct ClaudeSessionService {
             .trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
             throw ClaudeOAuthFetchError.invalidResponse
         }
-        print("[ClaudeSessionService] Parsed as plain API key")
         // For API keys, we don't have refresh token, expiry, or scopes
         return ClaudeOAuthCredentials(
             accessToken: apiKey,
             refreshToken: nil,
-            expiresAt: nil,  // API keys don't expire
+            expiresAt: nil,
             scopes: [],
             rateLimitTier: nil
         )
