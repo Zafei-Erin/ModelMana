@@ -8,7 +8,7 @@
 import Foundation
 
 /// Single provider configuration
-struct ProviderConfig: Codable, Identifiable {
+struct ProviderConfig: Codable, Identifiable, Equatable {
     let id: String
     let name: String
     let baseUrl: String

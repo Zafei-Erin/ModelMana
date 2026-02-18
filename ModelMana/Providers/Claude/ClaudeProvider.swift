@@ -37,7 +37,12 @@ class ClaudeProvider: AIProvider {
     // MARK: - Login State
 
     var loginState: ClaudeLoginState = ClaudeLoginState()
-    var selectedCredential: ClaudeCredentialType?
+
+    /// Selected credential type - persisted in configuration
+    var selectedCredential: ClaudeCredentialType? {
+        get { ProviderRegistry.shared.configuration.selectedClaudeCredential }
+        set { ProviderRegistry.shared.configuration.selectedClaudeCredential = newValue }
+    }
 
     init(config: ProviderConfig) {
         self.config = config
@@ -71,7 +76,7 @@ class ClaudeProvider: AIProvider {
 
     // MARK: - Subscription
 
-    private func refreshSubscriptionUsage() async {
+    func refreshSubscriptionUsage() async {
         isSubscriptionLoading = true
         defer { isSubscriptionLoading = false }
 
@@ -91,7 +96,8 @@ class ClaudeProvider: AIProvider {
 
     // MARK: - Console
 
-    private func refreshConsoleCost() async {
+    func refreshConsoleCost() async {
+        Logger.log("Claude", "Console: Refreshing cost...")
         isConsoleLoading = true
         costLoadingState = .loading
         defer {
@@ -106,12 +112,17 @@ class ClaudeProvider: AIProvider {
             if let cost = metrics.totalCost {
                 Logger.log("Claude", "Console: $\(String(format: "%.2f", cost))")
             } else {
-                Logger.log("Claude", "Console: No data")
+                Logger.log("Claude", "Console: No cost data")
             }
-        } catch ClaudeCookieError.noBrowserFound {
-            Logger.log("Claude", "Console: No browser cookies")
+        } catch let cookieErr as ClaudeCookieError {
+            Logger.error("Claude", "Console: Cookie error - \(cookieErr.localizedDescription)")
+            costLoadingState = .error(cookieErr.localizedDescription)
+        } catch let apiErr as CookieAPIError {
+            Logger.error("Claude", "Console: API error - \(apiErr.localizedDescription)")
+            costLoadingState = .error(apiErr.localizedDescription)
         } catch {
-            Logger.error("Claude", "Console: \(error.localizedDescription)")
+            Logger.error("Claude", "Console: Unknown error - \(error.localizedDescription)")
+            costLoadingState = .error(error.localizedDescription)
         }
     }
 
@@ -139,7 +150,6 @@ class ClaudeProvider: AIProvider {
 
     // MARK: - Login
 
-    /// Start Claude login
     func startLogin(method: ClaudeLoginMethod) {
         loginState = ClaudeLoginState(phase: .requesting, method: method)
 
@@ -151,37 +161,35 @@ class ClaudeProvider: AIProvider {
                     }
                 }
 
-                Task { @MainActor in
-                    loginState.phase = .success
-                    Logger.success("Claude", "Logged in via \(method.displayName)")
+                switch method {
+                case .subscription:
+                    let creds = try ClaudeSessionService.loadCredentials()
+                    let usage = try await ClaudeOAuthUsageFetcher.fetchUsage(accessToken: creds.accessToken)
+                    ClaudeSessionService.lastUsage = usage
 
-                    switch method {
-                    case .subscription:
+                    Task { @MainActor in
+                        loginState.phase = .success
                         selectedCredential = .subscription
                         isSubscriptionLoggedIn = true
+                        subscriptionUsage = usage
                         ProviderRegistry.shared.selectProvider(id)
                         ProviderRegistry.shared.selectApiKey("")
-
-                        do {
-                            let usage = try await ClaudeSessionService.refreshUsage()
-                            subscriptionUsage = usage
-                        } catch {
-                            Logger.error("Claude", "Failed to fetch usage")
-                        }
-
-                    case .console:
-                        selectedCredential = .console
-                        ProviderRegistry.shared.selectProvider(id)
-                        ProviderRegistry.shared.selectApiKey("")
-
-                        await refreshConsoleCost()
+                        try? SettingsFileService.writeKeychainAuthSettings()
                     }
 
-                    try? SettingsFileService.writeKeychainAuthSettings()
-                }
-            } catch let error as ClaudeLoginError {
-                Task { @MainActor in
-                    loginState.phase = .failed(error.localizedDescription)
+                case .console:
+                    let metrics = try await ClaudeConsoleCostService.fetchCurrentMonthMetrics()
+
+                    Task { @MainActor in
+                        loginState.phase = .success
+                        selectedCredential = .console
+                        consoleMetrics = metrics
+                        costLoadingState = .success
+                        lastConsoleUpdate = Date()
+                        ProviderRegistry.shared.selectProvider(id)
+                        ProviderRegistry.shared.selectApiKey("")
+                        try? SettingsFileService.writeKeychainAuthSettings()
+                    }
                 }
             } catch {
                 Task { @MainActor in

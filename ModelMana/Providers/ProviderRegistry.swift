@@ -21,8 +21,10 @@ class ProviderRegistry {
     /// Application configuration - when modified, saves to disk
     var configuration: AppConfiguration {
         didSet {
-            // When config changes, reload providers
-            reloadProviders()
+            // Only reload providers when providers list changes (add/remove/modify API keys)
+            if configuration.providers != oldValue.providers {
+                reloadProviders()
+            }
             // Persist to disk
             try? ConfigService.saveConfiguration(configuration)
         }
@@ -43,6 +45,11 @@ class ProviderRegistry {
     var selectedProvider: (any AIProvider)? {
         guard let selectedId = configuration.selectedProviderId else { return nil }
         return allProviders.first { $0.id == selectedId }
+    }
+
+    /// Check if any provider is currently loading
+    var isAnyProviderLoading: Bool {
+        claude.isSubscriptionLoading || claude.isConsoleLoading
     }
 
     // MARK: - Timer
@@ -70,7 +77,6 @@ class ProviderRegistry {
     // MARK: - Provider Management
 
     private func reloadProviders() {
-        // Get or create default configs for each provider
         claude = ClaudeProvider(
             config: configuration["claude"] ?? ProviderConfig(
                 id: "claude",
