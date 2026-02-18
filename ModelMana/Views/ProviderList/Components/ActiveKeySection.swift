@@ -51,7 +51,7 @@ struct ActiveKeySection: View {
             case .subscription:
                 return "\(providerName) - Subscription"
             case .console:
-                return "\(providerName) - Console"
+                return "\(providerName) - Console API"
             }
         }
         return "\(providerName) - \(apiKeyName)"
@@ -142,6 +142,14 @@ struct ActiveKeySection: View {
                         .font(.system(size: 8))
                         .foregroundStyle(.secondary)
                 }
+            } else if case .idle = AppState.shared.costLoadingState {
+                Text("—")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else if case .error = AppState.shared.costLoadingState {
+                Text("Error")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
             } else {
                 Text("Loading...")
                     .font(.system(size: 10))
@@ -189,41 +197,37 @@ struct ActiveKeySection: View {
     @ViewBuilder
     private func quotaProgressView(for apiKeyId: String?) -> some View {
         if let apiKeyId {
-            let quota = AppState.shared.getQuota(for: apiKeyId)
+            if providerId == "zhipu" {
+                renderQuotaStatus(ProviderRegistry.shared.zhipu.quota(for: apiKeyId))
+            } else if providerId == "minimax" {
+                renderQuotaStatus(ProviderRegistry.shared.minimax.quota(for: apiKeyId))
+            } else if providerId == "claude" {
+                renderQuotaStatus(ProviderRegistry.shared.claude.quota(for: apiKeyId))
+            } else {
+                renderQuotaStatus(ApiKeyQuota(status: .error("Unknown provider")))
+            }
+        }
+    }
 
-            switch quota.status {
-            case .loading:
-                ProgressView()
-                    .scaleEffect(0.3)
-
-            case .success(let percentage, _):
-                VStack(spacing: 2) {
-                    HStack(spacing: 8) {
-                        ProgressView(value: percentage / 100, total: 1.0)
-                            .progressViewStyle(BlackProgressStyle())
-
-                        Text("\(Int(percentage))%")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let resetText = quota.resetTimeText {
-                        Text(resetText)
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
+    @ViewBuilder
+    private func renderQuotaStatus(_ quota: ApiKeyQuota) -> some View {
+        switch quota.status {
+        case .loading:
+            ProgressView().scaleEffect(0.3)
+        case .success(let percentage, _):
+            VStack(spacing: 2) {
+                HStack(spacing: 8) {
+                    ProgressView(value: percentage / 100, total: 1.0).progressViewStyle(BlackProgressStyle())
+                    Text("\(Int(percentage))%").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
-
-            case .error:
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.red)
-                    Text("failed to fetch")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.red)
+                if let resetText = quota.resetTimeText {
+                    Text(resetText).font(.system(size: 9)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
                 }
+            }
+        case .error:
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(.red)
+                Text("failed to fetch").font(.system(size: 10)).foregroundStyle(.red)
             }
         }
     }

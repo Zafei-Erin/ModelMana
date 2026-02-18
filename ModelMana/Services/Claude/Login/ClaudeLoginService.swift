@@ -2,10 +2,11 @@
 //  ClaudeLoginService.swift
 //  ModelMana
 //
-//  Claude login/logout service using PTY
+//  Claude login/logout service
 //
 
 import Foundation
+import AppKit
 
 /// Claude login service
 final class ClaudeLoginService {
@@ -13,148 +14,90 @@ final class ClaudeLoginService {
 
     private init() {}
 
-    /// Start Claude login process
-    /// - Parameters:
-    ///   - method: Login method (subscription or console)
-    ///   - onPhaseChange: Callback for phase changes
-    /// - Returns: Async throws - success or error
+    private func resolveClaudePath() throws -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+        let paths = [
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+            "/usr/bin/claude",
+            "\(home)/.npm-global/bin/claude",
+            "\(home)/.local/bin/claude",
+        ]
+
+        for path in paths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        if let path = ShellPathLocator.which("claude") {
+            return path
+        }
+
+        throw ClaudeLoginError.cliNotFound
+    }
+
+    private func openTerminal(withCommand: String) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [
+            "-e",
+            "tell application \"Terminal\" to do script \"\(withCommand.replacingOccurrences(of: "\"", with: "\\\""))\""
+        ]
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus != 0 {
+                throw ClaudeLoginError.launchFailed("Failed to launch Terminal")
+            }
+        } catch {
+            throw ClaudeLoginError.launchFailed("Failed to launch Terminal: \(error.localizedDescription)")
+        }
+    }
+
     func startLogin(
         method: ClaudeLoginMethod,
         onPhaseChange: @escaping @Sendable (ClaudeLoginPhase) -> Void
     ) async throws {
         onPhaseChange(.requesting)
 
-        let runner = TTYCommandRunner()
-        var options = TTYCommandRunner.Options(
-            rows: 50,
-            cols: 160,
-            timeout: 120,
-            extraArgs: ["/login"],
-            initialDelay: 0.4,
-            settleAfterStop: 0.35
-        )
+        let claudePath = try resolveClaudePath()
+        try openTerminal(withCommand: "\(claudePath) /login")
 
-        // Stop when login succeeds
-        options.stopOnSubstrings = [
-            "Successfully logged in",
-            "Login successful",
-            "Logged in successfully",
-            "already logged in"
-        ]
+        try await Task.sleep(nanoseconds: 500_000_000)
 
-        // Auto-select login method when prompted
-        // The TUI shows a cursor ❯ on the selected option
-        if method == .subscription {
-            // Option 1 is already selected, just press Enter
-            options.sendOnSubstrings = [
-                "Select login method:": "\r"
-            ]
-        } else {
-            // For console (option 2), press Down arrow first, then Enter when we see option 2 highlighted
-            options.sendOnSubstrings = [
-                "Select login method:": "\u{1B}[B",           // Down arrow (ESC[B) to move to option 2
-                "Anthropic Console account": "\r"            // Press Enter when option 2 is shown
-            ]
-            // Add delay after sending Down arrow to let TUI update cursor position
-            options.sendDelays = [
-                "Select login method:": 0.15  // Wait 150ms for cursor to move
-            ]
-        }
+        let timeout: TimeInterval = 120
+        let startTime = Date()
+        let isLoggedIn = method == .subscription ? ClaudeSessionService.isSubscriptionLoggedIn : ClaudeSessionService.isConsoleLoggedIn
 
-        do {
-            let result = try runner.run(
-                binary: "claude",
-                send: "",
-                options: options,
-                onURLDetected: {
-                    onPhaseChange(.waitingBrowser)
-                }
-            )
-
-            // Verify success by checking output
-            let output = result.text
-            let hasSuccess = options.stopOnSubstrings.contains { output.contains($0) }
-
-            if hasSuccess {
-                // Check if actually logged in by verifying credentials
-                ClaudeSessionService.invalidateCache()
-
-                if ClaudeSessionService.isLoggedIn() {
-                    // Fetch and cache usage after successful login
-                    do {
-                        let creds = try ClaudeSessionService.loadCredentials()
-                        let usage = try await ClaudeOAuthUsageFetcher.fetchUsage(accessToken: creds.accessToken)
-                        ClaudeSessionService.lastUsage = usage
-                    } catch {
-                        // Login succeeded but usage fetch failed - still consider login successful
-                    }
-                    return  // Success
-                } else {
-                    throw ClaudeLoginError.sessionNotCreated
-                }
-            } else {
-                throw ClaudeLoginError.commandFailed(output)
+        while Date().timeIntervalSince(startTime) < timeout {
+            if isLoggedIn() {
+                return
             }
-
-        } catch TTYCommandRunner.Error.binaryNotFound {
-            throw ClaudeLoginError.cliNotFound
-        } catch TTYCommandRunner.Error.timedOut {
-            throw ClaudeLoginError.timedOut
-        } catch TTYCommandRunner.Error.launchFailed(let message) {
-            throw ClaudeLoginError.launchFailed(message)
+            try await Task.sleep(nanoseconds: 2_000_000_000)
         }
+
+        throw ClaudeLoginError.timedOut
     }
 
-    /// Start Claude logout process
-    /// Runs `claude /logout` to let Claude CLI clean up its own credentials
-    /// - Returns: Async throws - success or error
     func startLogout() async throws {
-        let runner = TTYCommandRunner()
-        var options = TTYCommandRunner.Options(
-            rows: 50,
-            cols: 160,
-            timeout: 30,
-            extraArgs: ["/logout"],
-            initialDelay: 0.4,
-            settleAfterStop: 0.35
-        )
+        let claudePath = try resolveClaudePath()
+        try openTerminal(withCommand: "\(claudePath) /logout")
 
-        // Stop when logout succeeds
-        options.stopOnSubstrings = [
-            "Successfully logged out from your Anthropic account",
-            "Logged out successfully",
-            "Successfully logged out",
-            "You have been logged out"
-        ]
+        try await Task.sleep(nanoseconds: 2_000_000_000)
 
-        do {
-            let result = try runner.run(
-                binary: "claude",
-                send: "",
-                options: options,
-                onURLDetected: {}
-            )
-
-            // Verify success by checking output
-            let output = result.text
-            let hasSuccess = options.stopOnSubstrings.contains { output.contains($0) }
-
-            if hasSuccess {
-                Logger.success("Claude", "Logged out")
+        let startTime = Date()
+        while Date().timeIntervalSince(startTime) < 30 {
+            if !ClaudeSessionService.isLoggedIn() {
                 ClaudeSessionService.invalidateCache()
-            } else {
-                // Even if we don't see the success message, logout might have worked
-                if !ClaudeSessionService.isLoggedIn() {
-                    Logger.success("Claude", "Logged out")
-                }
+                return
             }
-        } catch TTYCommandRunner.Error.binaryNotFound {
-            throw ClaudeLoginError.cliNotFound
-        } catch TTYCommandRunner.Error.timedOut {
-            throw ClaudeLoginError.timedOut
-        } catch TTYCommandRunner.Error.launchFailed(let message) {
-            throw ClaudeLoginError.launchFailed(message)
+            try await Task.sleep(nanoseconds: 1_000_000_000)
         }
+
+        ClaudeSessionService.invalidateCache()
     }
 }
 
@@ -256,6 +199,28 @@ struct ClaudeSessionService {
     static func isLoggedIn() -> Bool {
         do {
             let creds = try loadCredentials()
+            return !creds.isExpired
+        } catch {
+            return false
+        }
+    }
+
+    /// Check if Subscription login is active (checks .credentials.json file)
+    static func isSubscriptionLoggedIn() -> Bool {
+        do {
+            let data = try loadFromFile()
+            let creds = try parseCredentials(data: data)
+            return !creds.isExpired
+        } catch {
+            return false
+        }
+    }
+
+    /// Check if Console login is active (checks Keychain for "Claude Code")
+    static func isConsoleLoggedIn() -> Bool {
+        do {
+            let data = try loadFromKeychain()
+            let creds = try parseCredentials(data: data)
             return !creds.isExpired
         } catch {
             return false

@@ -12,6 +12,7 @@ struct AppConfiguration: Codable {
     var providers: [ProviderConfig]
     var selectedProviderId: String?
     var selectedApiKeyId: String?  // Globally selected API Key id
+    var selectedClaudeCredential: ClaudeCredentialType?  // Claude credential type
 
     /// Get currently selected Provider configuration
     var currentProvider: ProviderConfig? {
@@ -35,10 +36,11 @@ struct AppConfiguration: Codable {
         return currentApiKeyConfig?.key
     }
 
-    init(providers: [ProviderConfig], selectedProviderId: String?, selectedApiKeyId: String? = nil) {
+    init(providers: [ProviderConfig], selectedProviderId: String?, selectedApiKeyId: String? = nil, selectedClaudeCredential: ClaudeCredentialType? = nil) {
         self.providers = providers
         self.selectedProviderId = selectedProviderId
         self.selectedApiKeyId = selectedApiKeyId
+        self.selectedClaudeCredential = selectedClaudeCredential
     }
 
     /// Subscript for accessing provider by id
