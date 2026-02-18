@@ -32,15 +32,21 @@ struct ActiveKeySection: View {
                 if providerId != "claude" {
                     quotaProgressView(for: apiKeyId)
                 }
-            }
 
-            Spacer()
-
-            // Right side info for Claude (all credential types)
-            if providerId == "claude", let credential = credentialType {
-                rightSideInfo(for: credential)
+                // For Claude, show right side info on a new line
+                if providerId == "claude", let credential = credentialType {
+                    if case .console = credential, AppState.shared.claudeConsoleMetrics != nil {
+                        // Success: span to right edge
+                        rightSideInfo(for: credential)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    } else {
+                        // Other states: left aligned
+                        rightSideInfo(for: credential)
+                    }
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var displayName: String {
@@ -130,30 +136,49 @@ struct ActiveKeySection: View {
         }
     }
 
+    @ViewBuilder
     private var consoleRightSideInfo: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            if let metrics = AppState.shared.claudeConsoleMetrics {
-                Text(metrics.formattedCost)
-                    .font(.system(size: 11))
-                    .fontWeight(.medium)
+        if let metrics = AppState.shared.claudeConsoleMetrics {
+            // Success: show monthly cost on left, current cost on right
+            HStack(alignment: .top) {
+                Text("Monthly Cost")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
 
-                if let updateDate = AppState.shared.lastCostUpdate {
-                    Text(updateTimeText(updateDate))
-                        .font(.system(size: 8))
+                Spacer()
+
+                // Right: current cost + update time
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(metrics.formattedCost)
+                        .font(.system(size: 11))
+                        .fontWeight(.medium)
+
+                    if let updateDate = AppState.shared.lastCostUpdate {
+                        Text(updateTimeText(updateDate))
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } else {
+            // Other states: left aligned
+            VStack(alignment: .leading, spacing: 2) {
+                switch AppState.shared.costLoadingState {
+                case .idle:
+                    Text("—")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                case .error:
+                    Text("Error")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+
+                default:
+                    Text("Loading...")
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
-            } else if case .idle = AppState.shared.costLoadingState {
-                Text("—")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            } else if case .error = AppState.shared.costLoadingState {
-                Text("Error")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.red)
-            } else {
-                Text("Loading...")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
             }
         }
     }

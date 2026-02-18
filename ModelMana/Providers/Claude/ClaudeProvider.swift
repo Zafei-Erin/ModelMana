@@ -61,9 +61,11 @@ class ClaudeProvider: AIProvider {
     func refreshUsage() async {
         Logger.log("Claude", "Refreshing...")
         // Refresh all active usage types in parallel
-        async let _ = refreshSubscriptionUsage()
-        async let _ = refreshConsoleCost()
-        async let _ = refreshApiKeysQuota()
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.refreshSubscriptionUsage() }
+            group.addTask { await self.refreshConsoleCost() }
+            group.addTask { await self.refreshApiKeysQuota() }
+        }
     }
 
     func makeDropdownPanel() -> any View {
@@ -89,8 +91,22 @@ class ClaudeProvider: AIProvider {
             }
         } catch ClaudeOAuthFetchError.credentialsNotFound {
             Logger.log("Claude", "Subscription: Not logged in")
+        } catch let err as ClaudeOAuthFetchError {
+            // Log detailed error info
+            switch err {
+            case .serverError(let code, let body):
+                if let body = body {
+                    Logger.error("Claude", "Subscription: HTTP \(code) - \(body)")
+                } else {
+                    Logger.error("Claude", "Subscription: HTTP \(code)")
+                }
+            case .networkError(let netErr):
+                Logger.error("Claude", "Subscription: Network - \(netErr)")
+            default:
+                Logger.error("Claude", "Subscription: \(err.localizedDescription)")
+            }
         } catch {
-            Logger.error("Claude", "Subscription: \(error.localizedDescription)")
+            Logger.error("Claude", "Subscription: \(error)")
         }
     }
 
@@ -118,10 +134,27 @@ class ClaudeProvider: AIProvider {
             Logger.error("Claude", "Console: Cookie error - \(cookieErr.localizedDescription)")
             costLoadingState = .error(cookieErr.localizedDescription)
         } catch let apiErr as CookieAPIError {
-            Logger.error("Claude", "Console: API error - \(apiErr.localizedDescription)")
+            switch apiErr {
+            case .httpError(let code, let body):
+                if let body = body {
+                    Logger.error("Claude", "Console: HTTP \(code) - \(body)")
+                } else {
+                    Logger.error("Claude", "Console: HTTP \(code)")
+                }
+            case .networkError(let netErr):
+                // Skip logging cancelled errors (expected during refresh)
+                let nsErr = netErr as NSError
+                if nsErr.domain == NSURLErrorDomain, nsErr.code == NSURLErrorCancelled {
+                    // Request was cancelled, likely due to refresh - don't log
+                } else {
+                    Logger.error("Claude", "Console: Network - \(netErr)")
+                }
+            default:
+                Logger.error("Claude", "Console: \(apiErr.localizedDescription)")
+            }
             costLoadingState = .error(apiErr.localizedDescription)
         } catch {
-            Logger.error("Claude", "Console: Unknown error - \(error.localizedDescription)")
+            Logger.error("Claude", "Console: Unknown - \(error)")
             costLoadingState = .error(error.localizedDescription)
         }
     }
