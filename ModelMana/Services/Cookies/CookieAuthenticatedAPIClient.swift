@@ -73,15 +73,6 @@ struct CookieAuthenticatedAPIClient {
         let cookieString = cookies.map { "\($0.key)=\($0.value)" }.joined(separator: "; ")
         request.setValue(cookieString, forHTTPHeaderField: "Cookie")
 
-        // Debug logging
-        print("[CookieAuthenticatedAPIClient] === API REQUEST ===")
-        print("[CookieAuthenticatedAPIClient] URL: \(url.absoluteString)")
-        print("[CookieAuthenticatedAPIClient] Method: GET")
-        print("[CookieAuthenticatedAPIClient] Timeout: \(timeout)s")
-        print("[CookieAuthenticatedAPIClient] Cookie: \(cookieString)")
-        print("[CookieAuthenticatedAPIClient] Headers: \(additionalHeaders)")
-        print("[CookieAuthenticatedAPIClient] ========================")
-
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -89,38 +80,28 @@ struct CookieAuthenticatedAPIClient {
                 throw CookieAPIError.networkError(URLError(.badServerResponse))
             }
 
-            print("[CookieAuthenticatedAPIClient] Response status: \(httpResponse.statusCode)")
-
             switch httpResponse.statusCode {
             case 200...299:
                 break
             case 401:
-                print("[CookieAuthenticatedAPIClient] Response body: \(String(data: data, encoding: .utf8) ?? "nil")")
                 throw CookieAPIError.httpError(401, "Unauthorized. Please check cookies.")
             case 403:
-                print("[CookieAuthenticatedAPIClient] Response body: \(String(data: data, encoding: .utf8) ?? "nil")")
                 throw CookieAPIError.httpError(403, "Forbidden. Insufficient permissions.")
             default:
                 let body = String(data: data, encoding: .utf8)
-                print("[CookieAuthenticatedAPIClient] ERROR Response body: \(body ?? "nil")")
                 throw CookieAPIError.httpError(httpResponse.statusCode, body)
             }
 
             do {
                 let decoder = JSONDecoder()
-                let result = try decoder.decode(T.self, from: data)
-                print("[CookieAuthenticatedAPIClient] ✓ Decode successful")
-                return result
+                return try decoder.decode(T.self, from: data)
             } catch {
-                print("[CookieAuthenticatedAPIClient] ✗ Decode error: \(error)")
-                print("[CookieAuthenticatedAPIClient] Response body: \(String(data: data, encoding: .utf8) ?? "nil")")
                 throw CookieAPIError.decodingError(error)
             }
 
         } catch let error as CookieAPIError {
             throw error
         } catch {
-            print("[CookieAuthenticatedAPIClient] ✗ Network error: \(error)")
             throw CookieAPIError.networkError(error)
         }
     }

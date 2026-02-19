@@ -20,4 +20,5 @@ project.xcworkspace/
 
 # Worktrees
 .worktrees/
-build
+
+build/

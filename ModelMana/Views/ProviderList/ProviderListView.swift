@@ -69,6 +69,13 @@ struct ProviderListView: View {
             // Available Providers Section
             availableProvidersSection
 
+            Divider().padding(.vertical, 6)
+
+            // Refresh Data
+            refreshDataButton
+
+            Divider().padding(.vertical, 6)
+
             // Quit
             quitButton
         }
@@ -174,6 +181,31 @@ struct ProviderListView: View {
                 .font(.system(size: 13))
                 .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 20)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Refresh Data Button
+
+    private var refreshDataButton: some View {
+        Button(action: {
+            Task {
+                await ProviderRegistry.shared.refreshAll()
+            }
+        }) {
+            HStack(spacing: 6) {
+                Text("Refresh")
+                    .font(.system(size: 13))
+                Spacer()
+                if ProviderRegistry.shared.isAnyProviderLoading {
+                    ProgressView()
+                        .scaleEffect(0.4)
+                }
+            }
+            .foregroundColor(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 20)
         }
         .buttonStyle(.plain)
     }
@@ -200,24 +232,17 @@ struct ProviderListView: View {
         }
 
         let currentCredential = AppState.shared.selectedClaudeCredential
-        print(
-            "[ModelMana] Current credential: \(String(describing: currentCredential)), switching to: \(providerConfig.id)"
-        )
 
         // If switching away from Claude subscription/console, delete keychain entry
         if case .subscription = currentCredential {
             if providerConfig.id != "claude" {
-                print(
-                    "[ModelMana] Switching from subscription to \(providerConfig.id), deleting keychain"
-                )
                 SettingsFileService.deleteClaudeKeychainEntry()
-                AppState.shared.isSubscriptionLoggedIn = false
+                AppState.shared.selectedClaudeCredential = nil
             }
         } else if case .console = currentCredential {
             if providerConfig.id != "claude" {
-                print(
-                    "[ModelMana] Switching from console to \(providerConfig.id), deleting keychain")
                 SettingsFileService.deleteClaudeKeychainEntry()
+                AppState.shared.selectedClaudeCredential = nil
             }
         }
 
@@ -226,13 +251,17 @@ struct ProviderListView: View {
                 baseUrl: providerConfig.baseUrl,
                 apiKey: apiKeyConfig.key
             )
+
+            // Update configuration in one go to avoid triggering multiple reloads
             var newConfig = AppState.shared.configuration
             newConfig.selectedProviderId = providerConfig.id
             newConfig.selectedApiKeyId = apiKeyId
-            AppState.shared.configuration = newConfig
 
             // Persist configuration to disk
             try? ConfigService.saveConfiguration(newConfig)
+
+            // Then update the shared configuration (triggers reloadProviders)
+            AppState.shared.configuration = newConfig
 
             // Track credential type if this is Claude
             if providerConfig.id == "claude" {
@@ -242,9 +271,16 @@ struct ProviderListView: View {
                 AppState.shared.selectedClaudeCredential = nil
             }
 
-            print("[ModelMana] Selected: \(providerConfig.name) / \(apiKeyConfig.name)")
+            // Trigger quota refresh for the newly selected provider
+            Task {
+                if let provider = ProviderRegistry.shared.provider(withId: providerConfig.id) {
+                    await provider.refreshUsage()
+                }
+            }
+
+            Logger.log("Provider", "Selected: \(providerConfig.name) / \(apiKeyConfig.name)")
         } catch {
-            print("[ModelMana] ERROR: \(error.localizedDescription)")
+            Logger.error("Provider", error.localizedDescription)
         }
     }
 

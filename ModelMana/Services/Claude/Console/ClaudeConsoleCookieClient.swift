@@ -78,8 +78,6 @@ enum ClaudeConsoleCookieClient {
     static func getCookies() async throws -> ClaudeConsoleCookies {
         // Try each browser - for each browser, query ALL domains
         for browser in browsers {
-            print("[ClaudeConsoleCookieClient] Trying \(browser.displayName)...")
-
             var browserCookies: [String: String] = [:]
             let client = BrowserCookieClient()
 
@@ -108,10 +106,8 @@ enum ClaudeConsoleCookieClient {
             let hasSessionKey = browserCookies["sessionKey"] != nil
             let hasDeviceId = browserCookies["anthropic-device-id"] != nil
 
-            print("[ClaudeConsoleCookieClient] \(browser.displayName) has: \(Array(browserCookies.keys).joined(separator: ", "))")
-
             if hasSessionKey && hasDeviceId {
-                print("[ClaudeConsoleCookieClient] Using cookies from \(browser.displayName)")
+                Logger.log("Claude", "Using cookies from \(browser.displayName)")
 
                 // Cache the results (only from the primary domain)
                 await BrowserCookieService.setCachedCookies(

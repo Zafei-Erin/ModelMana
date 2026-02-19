@@ -12,6 +12,7 @@ struct AppConfiguration: Codable {
     var providers: [ProviderConfig]
     var selectedProviderId: String?
     var selectedApiKeyId: String?  // Globally selected API Key id
+    var selectedClaudeCredential: ClaudeCredentialType?  // Claude credential type
 
     /// Get currently selected Provider configuration
     var currentProvider: ProviderConfig? {
@@ -35,9 +36,26 @@ struct AppConfiguration: Codable {
         return currentApiKeyConfig?.key
     }
 
-    init(providers: [ProviderConfig], selectedProviderId: String?, selectedApiKeyId: String? = nil) {
+    init(providers: [ProviderConfig], selectedProviderId: String?, selectedApiKeyId: String? = nil, selectedClaudeCredential: ClaudeCredentialType? = nil) {
         self.providers = providers
         self.selectedProviderId = selectedProviderId
         self.selectedApiKeyId = selectedApiKeyId
+        self.selectedClaudeCredential = selectedClaudeCredential
+    }
+
+    /// Subscript for accessing provider by id
+    subscript(id: String) -> ProviderConfig? {
+        get { providers.first { $0.id == id } }
+        set {
+            if let index = providers.firstIndex(where: { $0.id == id }) {
+                if let newValue = newValue {
+                    providers[index] = newValue
+                } else {
+                    providers.remove(at: index)
+                }
+            } else if let newValue = newValue {
+                providers.append(newValue)
+            }
+        }
     }
 }

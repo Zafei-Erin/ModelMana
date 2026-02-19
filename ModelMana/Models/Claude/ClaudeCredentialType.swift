@@ -8,7 +8,7 @@
 import Foundation
 
 /// Represents the type of Claude credential being used
-enum ClaudeCredentialType: Equatable {
+enum ClaudeCredentialType: Equatable, Codable {
     case manualKey(String)  // apiKeyId
     case subscription
     case console
