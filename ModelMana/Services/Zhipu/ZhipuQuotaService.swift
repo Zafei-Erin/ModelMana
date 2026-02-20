@@ -35,6 +35,9 @@ struct ZhipuQuotaService {
                 return .failure(QuotaError.parseError("JSON parse failed"))
             }
 
+            // Debug: 打印完整的 limits 数组来查看有哪些类型
+            Logger.log("Zhipu", "All limits: \(data)")
+
             // 找到 type == "TOKENS_LIMIT" 且 unit == 3 的项
             for limit in limits {
                 if let type = limit["type"] as? String,

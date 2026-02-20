@@ -21,7 +21,7 @@ struct ActiveKeySection: View {
         HStack(spacing: 12) {
             ProviderIcon(providerId: providerId, size: 24)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(displayName)
                     .font(.system(size: 12))
                     .fontWeight(.semibold)
@@ -236,23 +236,43 @@ struct ActiveKeySection: View {
 
     @ViewBuilder
     private func renderQuotaStatus(_ quota: ApiKeyQuota) -> some View {
-        switch quota.status {
-        case .loading:
-            ProgressView().scaleEffect(0.3)
-        case .success(let percentage, _):
-            VStack(spacing: 2) {
-                HStack(spacing: 8) {
-                    ProgressView(value: percentage / 100, total: 1.0).progressViewStyle(BlackProgressStyle())
-                    Text("\(Int(percentage))%").font(.system(size: 10)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+            switch quota.status {
+            case .loading:
+                ProgressView()
+                    .scaleEffect(0.3)
+
+            case .success(let percentage, _):
+                if let title = quota.title {
+                    HStack(spacing: 0) {
+                        Text(title)
+                            .font(.system(size: 11))
+                        Spacer()
+                        if let resetText = quota.resetTimeText {
+                            Text(resetText)
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    }
                 }
-                if let resetText = quota.resetTimeText {
-                    Text(resetText).font(.system(size: 9)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
+                HStack(alignment: .firstTextBaseline , spacing: 6) {
+                    ProgressView(value: percentage / 100, total: 1.0)
+                        .progressViewStyle(BlackProgressStyle())
+                    Text("\(Int(percentage))%")
+                        .font(.system(size: 9))
                 }
-            }
-        case .error:
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(.red)
-                Text("failed to fetch").font(.system(size: 10)).foregroundStyle(.red)
+                .frame(height: 12)
+
+            case .error:
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                    Text("failed to fetch")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                }
             }
         }
     }

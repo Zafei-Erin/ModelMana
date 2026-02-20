@@ -68,6 +68,8 @@ class ClaudeProvider: AIProvider {
         }
     }
 
+    var hasCustomDropdownPanel: Bool { true }
+
     func makeDropdownPanel() -> any View {
         ClaudeProviderPanel(provider: self)
     }

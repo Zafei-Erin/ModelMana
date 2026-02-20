@@ -97,29 +97,34 @@ struct ApiKeyDropdownPanel: View {
                     .scaleEffect(0.3)
 
             case .success(let percentage, _):
-                HStack(spacing: 6) {
+                if let title = quota.title {
+                    HStack(spacing: 0) {
+                        Text(title)
+                            .font(.system(size: 11))
+                        Spacer()
+                        if let resetText = quota.resetTimeText {
+                            Text(resetText)
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    }
+                }
+                HStack(alignment: .firstTextBaseline , spacing: 6) {
                     ProgressView(value: percentage / 100, total: 1.0)
                         .progressViewStyle(BlackProgressStyle())
-
                     Text("\(Int(percentage))%")
                         .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
                 }
-
-                if let resetText = quota.resetTimeText {
-                    Text(resetText)
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+                .frame(height: 14)
 
             case .error:
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 8))
+                        .font(.system(size: 11))
                         .foregroundStyle(.red)
                     Text("failed to fetch")
-                        .font(.system(size: 8))
+                        .font(.system(size: 11))
                         .foregroundStyle(.red)
                 }
             }

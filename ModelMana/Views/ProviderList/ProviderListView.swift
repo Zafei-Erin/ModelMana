@@ -310,22 +310,11 @@ struct ProviderListView: View {
         panel.hasShadow = true
 
         let contentView: NSHostingView<AnyView>
-        if provider.id == "claude" {
+        // Use provider's custom dropdown panel if available, otherwise use generic panel
+        if let aiProvider = ProviderRegistry.shared.provider(withId: provider.id),
+           aiProvider.hasCustomDropdownPanel {
             contentView = NSHostingView(
-                rootView: AnyView(
-                    ClaudeDropdownPanel(
-                        provider: provider,
-                        onSelectApiKey: { apiKeyId in
-                            selectApiKey(providerConfig: provider, apiKeyId: apiKeyId)
-                        },
-                        onSelectSubscription: {
-                            selectSubscription()
-                        },
-                        onSelectConsole: {
-                            selectConsole()
-                        }
-                    )
-                )
+                rootView: AnyView(aiProvider.makeDropdownPanel())
             )
         } else {
             contentView = NSHostingView(

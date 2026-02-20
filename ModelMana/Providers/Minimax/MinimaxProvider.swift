@@ -42,8 +42,10 @@ class MinimaxProvider: AIProvider {
         }
     }
 
+    var hasCustomDropdownPanel: Bool { false }
+
     func makeDropdownPanel() -> any View {
-        MinimaxProviderPanel(provider: self)
+        EmptyView()
     }
 
     func makeSettingsView() -> (any View)? {

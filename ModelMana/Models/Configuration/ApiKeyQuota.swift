@@ -17,10 +17,12 @@ struct ApiKeyQuota {
 
     var status: Status
     var lastUpdated: Date
+    var title: String?
 
-    init(status: Status, lastUpdated: Date = Date()) {
+    init(status: Status, lastUpdated: Date = Date(), title: String? = nil) {
         self.status = status
         self.lastUpdated = lastUpdated
+        self.title = title
     }
 
     /// Formatted reset time display

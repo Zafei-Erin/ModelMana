@@ -44,8 +44,10 @@ class ZhipuProvider: AIProvider {
         }
     }
 
+    var hasCustomDropdownPanel: Bool { false }
+
     func makeDropdownPanel() -> any View {
-        ZhipuProviderPanel(provider: self)
+        EmptyView()
     }
 
     func makeSettingsView() -> (any View)? {
@@ -70,7 +72,8 @@ class ZhipuProvider: AIProvider {
         case .success(let data):
             Logger.log("Zhipu", "Quota: \(data.percentage)%")
             quotas[apiKey.id] = ApiKeyQuota(
-                status: .success(percentage: data.percentage, nextResetTime: data.nextResetTime)
+                status: .success(percentage: data.percentage, nextResetTime: data.nextResetTime),
+                title: "Session (5h)"
             )
         case .failure(let error):
             Logger.error("Zhipu", error.localizedDescription)
