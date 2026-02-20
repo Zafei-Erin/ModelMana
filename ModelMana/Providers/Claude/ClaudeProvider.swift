@@ -68,7 +68,7 @@ class ClaudeProvider: AIProvider {
         }
     }
 
-    var hasCustomDropdownPanel: Bool { true }
+    var hasCustomDropdownPanel: Bool { false }
 
     func makeDropdownPanel() -> any View {
         ClaudeProviderPanel(provider: self)
@@ -178,7 +178,7 @@ class ClaudeProvider: AIProvider {
 
         // TODO: Implement Claude API key quota checking
         // For now, mark as not implemented
-        apiKeyQuotas[apiKey.id] = .loaded([QuotaItem(title: "Quota", status: .error("Not implemented"))])
+        apiKeyQuotas[apiKey.id] = .loaded([QuotaItem(title: "Session", status: .error("Not implemented"))])
     }
 
     func quota(for apiKeyId: String) -> QuotaState {

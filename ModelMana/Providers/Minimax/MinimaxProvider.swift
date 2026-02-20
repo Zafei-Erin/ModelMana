@@ -65,7 +65,7 @@ class MinimaxProvider: AIProvider {
 
         // TODO: Implement Minimax quota API
         // For now, mark as error since API is not yet implemented
-        quotas[apiKey.id] = .loaded([QuotaItem(title: "Quota", status: .error("Not implemented"))])
+        quotas[apiKey.id] = .loaded([QuotaItem(title: "Session", status: .error("Not implemented"))])
     }
 
     /// Register a new API key (called when API key is added)
