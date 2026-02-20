@@ -88,37 +88,70 @@ struct ApiKeyDropdownPanel: View {
 
     @ViewBuilder
     private func quotaProgressView(for key: ApiKeyConfig) -> some View {
-        let quota = AppState.shared.getQuota(for: key.id)
+        let state: QuotaState = {
+            switch provider.id {
+            case "zhipu":
+                return ProviderRegistry.shared.zhipu.quota(for: key.id)
+            case "minimax":
+                return ProviderRegistry.shared.minimax.quota(for: key.id)
+            case "claude":
+                return ProviderRegistry.shared.claude.quota(for: key.id)
+            default:
+                return .loaded([])
+            }
+        }()
 
-        VStack(alignment: .leading, spacing: 2) {
-            switch quota.status {
-            case .loading:
-                ProgressView()
-                    .scaleEffect(0.3)
+        switch state {
+        case .loading:
+            ProgressView()
+                .scaleEffect(0.3)
+                .padding(.leading, 24)
+                .padding(.top, 6)
 
-            case .success(let percentage, _):
-                if let title = quota.title {
-                    HStack(spacing: 0) {
-                        Text(title)
-                            .font(.system(size: 11))
-                        Spacer()
-                        if let resetText = quota.resetTimeText {
-                            Text(resetText)
-                                .font(.system(size: 8))
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
+        case .loaded(let items):
+            if items.isEmpty {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        renderQuotaItem(item)
                     }
                 }
-                HStack(alignment: .firstTextBaseline , spacing: 6) {
+                .padding(.leading, 24)
+                .padding(.top, 6)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func renderQuotaItem(_ item: QuotaItem) -> some View {
+        switch item.status {
+        case .success(let percentage, _):
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    Text(item.title)
+                        .font(.system(size: 11))
+                    Spacer()
+                    if let resetText = item.resetTimeText {
+                        Text(resetText)
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     ProgressView(value: percentage / 100, total: 1.0)
                         .progressViewStyle(BlackProgressStyle())
                     Text("\(Int(percentage))%")
                         .font(.system(size: 9))
                 }
-                .frame(height: 14)
+                .frame(height: 12)
+            }
 
-            case .error:
+        case .error:
+            VStack(alignment: .leading, spacing: 0) {
+                Text(item.title)
+                    .font(.system(size: 11))
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11))
@@ -129,7 +162,6 @@ struct ApiKeyDropdownPanel: View {
                 }
             }
         }
-        .padding(.leading, 24)
     }
 
     private func keyIcon(for key: ApiKeyConfig) -> some View {

@@ -20,27 +20,6 @@ class AppState {
         set { ProviderRegistry.shared.configuration = newValue }
     }
 
-    // MARK: - Quota State (delegated to providers)
-
-    /// API Key quota info (key is apiKeyId) - aggregated from providers
-    var apiKeyQuotas: [String: ApiKeyQuota] {
-        var result: [String: ApiKeyQuota] = [:]
-
-        for provider in ProviderRegistry.shared.allProviders {
-            if let zhipu = provider as? ZhipuProvider {
-                result.merge(zhipu.quotas) { _, new in new }
-            }
-            if let minimax = provider as? MinimaxProvider {
-                result.merge(minimax.quotas) { _, new in new }
-            }
-            if let claude = provider as? ClaudeProvider {
-                result.merge(claude.apiKeyQuotas) { _, new in new }
-            }
-        }
-
-        return result
-    }
-
     // MARK: - Claude State (delegated to ClaudeProvider)
 
     /// Claude login state
@@ -103,19 +82,6 @@ class AppState {
     }
 
     // MARK: - Quota Helpers
-
-    /// Get quota for specified API Key
-    func getQuota(for apiKeyId: String) -> ApiKeyQuota {
-        let zhipuQuota = ProviderRegistry.shared.zhipu.quota(for: apiKeyId)
-        if case .error = zhipuQuota.status {
-            let minimaxQuota = ProviderRegistry.shared.minimax.quota(for: apiKeyId)
-            if case .error = minimaxQuota.status {
-                return ProviderRegistry.shared.claude.quota(for: apiKeyId)
-            }
-            return minimaxQuota
-        }
-        return zhipuQuota
-    }
 
     /// Register new API Key (called when adding)
     func registerApiKey(_ apiKeyId: String) {

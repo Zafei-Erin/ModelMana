@@ -32,7 +32,7 @@ class ClaudeProvider: AIProvider {
 
     // MARK: - API Key State
 
-    var apiKeyQuotas: [String: ApiKeyQuota] = [:]
+    var apiKeyQuotas: [String: QuotaState] = [:]
 
     // MARK: - Login State
 
@@ -49,7 +49,7 @@ class ClaudeProvider: AIProvider {
 
         // Initialize quota entries for all API keys
         for key in config.apiKeys {
-            apiKeyQuotas[key.id] = ApiKeyQuota(status: .loading)
+            apiKeyQuotas[key.id] = .loading
         }
 
         // Check initial login status once
@@ -174,13 +174,15 @@ class ClaudeProvider: AIProvider {
     }
 
     private func refreshApiKeyQuota(for apiKey: ApiKeyConfig) async {
+        apiKeyQuotas[apiKey.id] = .loading
+
         // TODO: Implement Claude API key quota checking
         // For now, mark as not implemented
-        apiKeyQuotas[apiKey.id] = ApiKeyQuota(status: .error("Not implemented"))
+        apiKeyQuotas[apiKey.id] = .loaded([QuotaItem(title: "Quota", status: .error("Not implemented"))])
     }
 
-    func quota(for apiKeyId: String) -> ApiKeyQuota {
-        apiKeyQuotas[apiKeyId] ?? ApiKeyQuota(status: .error("API key not found"))
+    func quota(for apiKeyId: String) -> QuotaState {
+        apiKeyQuotas[apiKeyId] ?? .loaded([])
     }
 
     // MARK: - Login
@@ -237,7 +239,7 @@ class ClaudeProvider: AIProvider {
     /// Register a new API key
     func registerApiKey(_ apiKey: ApiKeyConfig) {
         if apiKeyQuotas[apiKey.id] == nil {
-            apiKeyQuotas[apiKey.id] = ApiKeyQuota(status: .loading)
+            apiKeyQuotas[apiKey.id] = .loading
         }
     }
 }

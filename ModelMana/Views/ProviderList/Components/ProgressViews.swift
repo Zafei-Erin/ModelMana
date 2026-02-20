@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Reusable quota progress view with size variants
 struct QuotaProgressView: View {
-    let quota: ApiKeyQuota
+    let item: QuotaItem
     var style: QuotaProgressStyle = .full
 
     enum QuotaProgressStyle {
@@ -18,22 +18,13 @@ struct QuotaProgressView: View {
     }
 
     var body: some View {
-        switch quota.status {
-        case .loading:
-            loadingView
-
+        switch item.status {
         case .success(let percentage, _):
             successView(percentage: percentage)
 
         case .error:
             errorView
         }
-    }
-
-    @ViewBuilder
-    private var loadingView: some View {
-        ProgressView()
-            .scaleEffect(style == .compact ? 0.3 : 0.5)
     }
 
     @ViewBuilder
@@ -56,7 +47,7 @@ struct QuotaProgressView: View {
                 .foregroundStyle(.secondary)
         }
 
-        if let resetText = quota.resetTimeText {
+        if let resetText = item.resetTimeText {
             Text(resetText)
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
@@ -76,7 +67,7 @@ struct QuotaProgressView: View {
                     .fontWeight(.medium)
             }
 
-            if let resetText = quota.resetTimeText {
+            if let resetText = item.resetTimeText {
                 Text(resetText)
                     .font(.system(size: 8))
                     .foregroundStyle(.secondary)
