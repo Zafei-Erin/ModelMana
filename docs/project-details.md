@@ -12,7 +12,10 @@
 - **API Key**: 未实现
 
 ### Zhipu
-- `ZhipuQuotaService` 调用 `/api/monitor/usage/quota/limit`，查找 `type=TOKENS_LIMIT` 且 `unit=3` 的配额数据
+- `ZhipuQuotaService` 调用 `/api/monitor/usage/quota/limit`，解析两种配额：
+  - `type=TOKENS_LIMIT, unit=3` → Session (5h) 会话配额
+  - `type=TIME_LIMIT, unit=5` → MCP 用量配额
+- 返回 `[QuotaItem]`，每项独立成功/失败
 
 ### Minimax
 - 待接入实际 API
@@ -71,6 +74,34 @@ if case .subscription = currentCredential {
     }
 }
 ```
+
+---
+
+## 配额数据模型
+
+### QuotaItem + QuotaState
+
+配额数据分两层：`QuotaItem` 表示单项配额（如 Session、MCP），`QuotaState` 表示一个 API Key 的整体配额状态。
+
+```swift
+// 单项配额
+struct QuotaItem {
+    enum Status {
+        case success(percentage: Double, nextResetTime: TimeInterval)
+        case error(String)
+    }
+    let title: String
+    let status: Status
+}
+
+// API Key 级配额状态
+enum QuotaState {
+    case loading
+    case loaded([QuotaItem])
+}
+```
+
+各 Provider 中 `quotas: [String: QuotaState]` 以 apiKeyId 为 key 存储配额。视图通过 `ProviderRegistry.shared.<provider>.quota(for:)` 直接获取。
 
 ---
 
