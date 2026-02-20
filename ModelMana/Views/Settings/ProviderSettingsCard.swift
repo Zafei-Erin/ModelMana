@@ -29,6 +29,7 @@ struct ProviderSettingsCard: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             baseUrlSection
+            modelConfigSection
             apiKeysSection
             addKeyForm
         }
@@ -123,6 +124,52 @@ struct ProviderSettingsCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(6)
+        }
+    }
+
+    // MARK: - Model Config Section
+
+    @ViewBuilder
+    private var modelConfigSection: some View {
+        if let mc = provider.modelConfig, !mc.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Model Configuration")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                    .padding(.leading, 4)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    if let v = mc.opusModel, !v.isEmpty {
+                        modelConfigRow("Opus", v)
+                    }
+                    if let v = mc.sonnetModel, !v.isEmpty {
+                        modelConfigRow("Sonnet", v)
+                    }
+                    if let v = mc.haikuModel, !v.isEmpty {
+                        modelConfigRow("Haiku", v)
+                    }
+                    if let v = mc.subagentModel, !v.isEmpty {
+                        modelConfigRow("Subagent", v)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(6)
+            }
+        }
+    }
+
+    private func modelConfigRow(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label + ":")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+            Text(value)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(Color(nsColor: .secondaryLabelColor))
         }
     }
 
@@ -243,7 +290,8 @@ struct ProviderSettingsCard: View {
         do {
             try SettingsFileService.writeSettings(
                 baseUrl: providerConfig.baseUrl,
-                apiKey: apiKeyConfig.key
+                apiKey: apiKeyConfig.key,
+                modelConfig: providerConfig.modelConfig
             )
             Logger.success("Settings", "API key synced")
         } catch {

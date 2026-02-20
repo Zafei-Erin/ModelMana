@@ -249,7 +249,8 @@ struct ProviderListView: View {
         do {
             try SettingsFileService.writeSettings(
                 baseUrl: providerConfig.baseUrl,
-                apiKey: apiKeyConfig.key
+                apiKey: apiKeyConfig.key,
+                modelConfig: providerConfig.modelConfig
             )
 
             // Update configuration in one go to avoid triggering multiple reloads
