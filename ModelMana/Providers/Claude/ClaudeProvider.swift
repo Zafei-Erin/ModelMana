@@ -178,11 +178,9 @@ class ClaudeProvider: AIProvider {
     }
 
     private func refreshApiKeyQuota(for apiKey: ApiKeyConfig) async {
-        apiKeyQuotas[apiKey.id] = .loading
-
-        // TODO: Implement Claude API key quota checking
-        // For now, mark as not implemented
-        apiKeyQuotas[apiKey.id] = .loaded([QuotaItem(title: "Session", status: .error("Not implemented"))])
+        // Claude API keys don't support usage queries
+        // Return empty loaded state to suppress any display
+        apiKeyQuotas[apiKey.id] = .loaded([])
     }
 
     func quota(for apiKeyId: String) -> QuotaState {
