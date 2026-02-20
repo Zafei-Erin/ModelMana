@@ -78,6 +78,10 @@ class ClaudeProvider: AIProvider {
         nil  // Uses generic settings view
     }
 
+    func makeAdditionalDropdownContent() -> (any View)? {
+        ClaudeAdditionalEntries(provider: self)
+    }
+
     // MARK: - Subscription
 
     func refreshSubscriptionUsage() async {
@@ -240,6 +244,94 @@ class ClaudeProvider: AIProvider {
     func registerApiKey(_ apiKey: ApiKeyConfig) {
         if apiKeyQuotas[apiKey.id] == nil {
             apiKeyQuotas[apiKey.id] = .loading
+        }
+    }
+}
+
+// MARK: - Claude Additional Dropdown Entries
+
+struct ClaudeAdditionalEntries: View {
+    @ObservedProvider private var provider: ClaudeProvider
+
+    init(provider: ClaudeProvider) {
+        self.provider = provider
+    }
+
+    private var isSubscriptionLoggedIn: Bool {
+        AppState.shared.isSubscriptionLoggedIn
+    }
+
+    var body: some View {
+        subscriptionEntry
+        Divider().padding(.horizontal, 6)
+        consoleEntry
+    }
+
+    // MARK: - Subscription
+
+    private var subscriptionEntry: some View {
+        CredentialEntryLayout(
+            title: "Subscription",
+            isSelected: provider.selectedCredential == .subscription,
+            action: { provider.startLogin(method: .subscription) }
+        ) {
+            if (provider.loginState.isProcessing && provider.loginState.method == .subscription)
+                || provider.isSubscriptionLoading {
+                ProgressView()
+                    .scaleEffect(0.3)
+                    .frame(height: 12)
+            } else {
+                if !isSubscriptionLoggedIn {
+                    Text("Login to use your subscription \(Image(systemName: "arrow.up.right"))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                if let usage = provider.subscriptionUsage?.fiveHour?.utilization {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        ProgressView(value: usage / 100, total: 1.0)
+                            .progressViewStyle(BlackProgressStyle())
+                        Text("\(Int(usage))%")
+                            .font(.system(size: 9))
+                    }
+                    .frame(height: 12)
+                } else if isSubscriptionLoggedIn {
+                    Text("Failed to fetch")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    // MARK: - Console
+
+    private var consoleEntry: some View {
+        CredentialEntryLayout(
+            title: "Console",
+            isSelected: provider.selectedCredential == .console,
+            action: { provider.startLogin(method: .console) }
+        ) {
+            if (provider.loginState.isProcessing && provider.loginState.method == .console)
+                || provider.isConsoleLoading {
+                ProgressView()
+                    .scaleEffect(0.3)
+                    .frame(height: 12)
+            } else {
+                if !ClaudeSessionService.isConsoleLoggedIn() {
+                    Text("Login to use console api \(Image(systemName: "arrow.up.right"))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                if let metrics = provider.consoleMetrics {
+                    Text("This month: \(metrics.formattedCost)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else if case .error = provider.costLoadingState {
+                    Text("Failed to fetch")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                }
+            }
         }
     }
 }

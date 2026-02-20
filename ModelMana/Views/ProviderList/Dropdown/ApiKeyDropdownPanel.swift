@@ -40,13 +40,15 @@ struct ApiKeyDropdownPanel: View {
                 emptyState
             } else {
                 ForEach(Array(provider.apiKeys.enumerated()), id: \.element.id) { index, key in
-                    keyButton(for: key)
+                    keyEntry(for: key)
                     if index < provider.apiKeys.count - 1 {
                         Divider()
                             .padding(.horizontal, 6)
                     }
                 }
             }
+
+            additionalContent
         }
     }
 
@@ -58,32 +60,23 @@ struct ApiKeyDropdownPanel: View {
             .padding(12)
     }
 
-    private func keyButton(for key: ApiKeyConfig) -> some View {
-        HoverButton(
+    private func keyEntry(for key: ApiKeyConfig) -> some View {
+        CredentialEntryLayout(
+            title: key.name,
             isSelected: key.id == selectedApiKeyId,
-            action: {
-                onSelectApiKey(key.id)
-            }
+            action: { onSelectApiKey(key.id) }
         ) {
-            keyLabel(for: key)
+            quotaProgressView(for: key)
         }
     }
 
-    private func keyLabel(for key: ApiKeyConfig) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                keyIcon(for: key)
-                Text(key.name)
-                    .font(.system(size: 13, weight: .semibold))
-
-                Spacer()
-            }
-
-            quotaProgressView(for: key)
+    @ViewBuilder
+    private var additionalContent: some View {
+        if let aiProvider = ProviderRegistry.shared.provider(withId: provider.id),
+           let additional = aiProvider.makeAdditionalDropdownContent() {
+            Divider().padding(.horizontal, 6)
+            AnyView(additional)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
     }
 
     @ViewBuilder
@@ -105,7 +98,6 @@ struct ApiKeyDropdownPanel: View {
         case .loading:
             ProgressView()
                 .scaleEffect(0.3)
-                .padding(.leading, 24)
                 .padding(.top, 6)
 
         case .loaded(let items):
@@ -117,7 +109,6 @@ struct ApiKeyDropdownPanel: View {
                         renderQuotaItem(item)
                     }
                 }
-                .padding(.leading, 24)
                 .padding(.top, 6)
             }
         }
@@ -162,13 +153,5 @@ struct ApiKeyDropdownPanel: View {
                 }
             }
         }
-    }
-
-    private func keyIcon(for key: ApiKeyConfig) -> some View {
-        let isSelected = key.id == selectedApiKeyId
-        let iconName = isSelected ? "checkmark.circle.fill" : "circle"
-        return Image(systemName: iconName)
-            .font(.system(size: 14))
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
     }
 }

@@ -33,4 +33,13 @@ protocol AIProvider: Observable, Identifiable {
 
     /// Get provider-specific settings view (optional)
     func makeSettingsView() -> (any View)?
+
+    /// Additional dropdown content rendered below API key list (optional)
+    func makeAdditionalDropdownContent() -> (any View)?
+}
+
+// MARK: - Default Implementations
+
+extension AIProvider {
+    func makeAdditionalDropdownContent() -> (any View)? { nil }
 }
