@@ -21,7 +21,7 @@ struct MiniMaxQuotaService {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("CodexBar", forHTTPHeaderField: "MM-API-Source")
+        request.setValue("ModelMana", forHTTPHeaderField: "MM-API-Source")
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
