@@ -31,8 +31,9 @@ class MinimaxProvider: AIProvider {
     // MARK: - Provider Protocol
 
     func refreshUsage() async {
-        // Minimax uses same quota pattern as Zhipu
-        // TODO: Implement Minimax-specific quota API when available
+        if !config.apiKeys.isEmpty {
+            Logger.log("Minimax", "Refreshing...")
+        }
         await withTaskGroup(of: Void.self) { group in
             for apiKey in config.apiKeys {
                 group.addTask {
@@ -63,9 +64,20 @@ class MinimaxProvider: AIProvider {
     private func refreshQuota(for apiKey: ApiKeyConfig) async {
         quotas[apiKey.id] = .loading
 
-        // TODO: Implement Minimax quota API
-        // For now, mark as error since API is not yet implemented
-        quotas[apiKey.id] = .loaded([QuotaItem(title: "Session", status: .error("Not implemented"))])
+        let result = await MiniMaxQuotaService.fetchQuota(apiKey: apiKey.key)
+
+        switch result {
+        case .success(let items):
+            if let percentage = items.first?.percentage {
+                Logger.log("Minimax", "Quota: \(Int(percentage ?? 0))%")
+            }
+            quotas[apiKey.id] = .loaded(items)
+        case .failure(let error):
+            Logger.error("Minimax", error.localizedDescription)
+            quotas[apiKey.id] = .loaded([
+                QuotaItem(title: "Session", status: .error(error.localizedDescription))
+            ])
+        }
     }
 
     /// Register a new API key (called when API key is added)
