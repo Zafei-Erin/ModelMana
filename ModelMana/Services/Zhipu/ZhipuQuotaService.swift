@@ -12,8 +12,8 @@ struct ZhipuQuotaService {
 
     /// 查询 API Key 的配额使用情况
     /// - Parameter apiKey: Zhipu API Key
-    /// - Returns: Result 包含 (percentage: Double, nextResetTime: TimeInterval) 或 Error
-    static func fetchQuota(apiKey: String) async -> Result<(percentage: Double, nextResetTime: TimeInterval), Error> {
+    /// - Returns: Result containing an array of QuotaItems (session + MCP) or Error
+    static func fetchQuota(apiKey: String) async -> Result<[QuotaItem], Error> {
         var request = URLRequest(url: URL(string: baseURL)!)
         request.httpMethod = "GET"
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
@@ -35,75 +35,33 @@ struct ZhipuQuotaService {
                 return .failure(QuotaError.parseError("JSON parse failed"))
             }
 
-            // 找到 type == "TOKENS_LIMIT" 且 unit == 3 的项
-            for limit in limits {
-                if let type = limit["type"] as? String,
-                   type == "TOKENS_LIMIT",
-                   let unit = limit["unit"] as? Int,
-                   unit == 3,
-                   let percentage = limit["percentage"] as? Double {
-                    let nextResetTime = (limit["nextResetTime"] as? TimeInterval)
-                        ?? (Date().addingTimeInterval(5 * 3600).timeIntervalSince1970 * 1000)
-                    return .success((percentage: percentage, nextResetTime: nextResetTime))
-                }
+            var items: [QuotaItem] = []
+
+            // Parse TOKENS_LIMIT (unit=3) → Session (5h)
+            if let sessionLimit = limits.first(where: { ($0["type"] as? String) == "TOKENS_LIMIT" && ($0["unit"] as? Int) == 3 }),
+               let percentage = sessionLimit["percentage"] as? Double {
+                let nextResetTime = (sessionLimit["nextResetTime"] as? TimeInterval)
+                    ?? (Date().addingTimeInterval(5 * 3600).timeIntervalSince1970 * 1000)
+                items.append(QuotaItem(title: "Session (5h)", status: .success(percentage: percentage, nextResetTime: nextResetTime)))
+            } else {
+                items.append(QuotaItem(title: "Session (5h)", status: .error("Data not found")))
             }
 
-            return .failure(QuotaError.parseError("TOKENS_LIMIT data not found"))
+            // Parse TIME_LIMIT (unit=5) → MCP
+            if let mcpLimit = limits.first(where: { ($0["type"] as? String) == "TIME_LIMIT" && ($0["unit"] as? Int) == 5 }),
+               let percentage = mcpLimit["percentage"] as? Double {
+                let nextResetTime = (mcpLimit["nextResetTime"] as? TimeInterval)
+                    ?? (Date().addingTimeInterval(5 * 3600).timeIntervalSince1970 * 1000)
+                items.append(QuotaItem(title: "MCP", status: .success(percentage: percentage, nextResetTime: nextResetTime)))
+            } else {
+                items.append(QuotaItem(title: "MCP", status: .error("Data not found")))
+            }
+
+            return .success(items)
 
         } catch {
             return .failure(error)
         }
-    }
-
-    /// 查询 API Key 的配额使用情况（带回调，用于非 async 上下文）
-    /// - Parameters:
-    ///   - apiKey: Zhipu API Key
-    ///   - completion: 完成回调
-    static func fetchQuota(apiKey: String, completion: @escaping (Result<(percentage: Double, nextResetTime: TimeInterval), Error>) -> Void) {
-        var request = URLRequest(url: URL(string: baseURL)!)
-        request.httpMethod = "GET"
-        request.setValue(apiKey, forHTTPHeaderField: "Authorization")
-        request.setValue("en-US,en", forHTTPHeaderField: "Accept-Language")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-
-            guard let data = data else {
-                completion(.failure(QuotaError.parseError("Empty response")))
-                return
-            }
-
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-                completion(.failure(QuotaError.httpError(httpResponse.statusCode)))
-                return
-            }
-
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let data = json["data"] as? [String: Any],
-               let limits = data["limits"] as? [[String: Any]] {
-
-                for limit in limits {
-                    if let type = limit["type"] as? String,
-                       type == "TOKENS_LIMIT",
-                       let unit = limit["unit"] as? Int,
-                       unit == 3,
-                       let percentage = limit["percentage"] as? Double {
-                        let nextResetTime = (limit["nextResetTime"] as? TimeInterval)
-                            ?? (Date().addingTimeInterval(5 * 3600).timeIntervalSince1970 * 1000)
-                        completion(.success((percentage: percentage, nextResetTime: nextResetTime)))
-                        return
-                    }
-                }
-
-                completion(.failure(QuotaError.parseError("TOKENS_LIMIT data not found")))
-            } else {
-                completion(.failure(QuotaError.parseError("JSON parse failed")))
-            }
-        }.resume()
     }
 }
 

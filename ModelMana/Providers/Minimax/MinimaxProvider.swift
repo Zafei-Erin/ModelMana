@@ -17,22 +17,23 @@ class MinimaxProvider: AIProvider {
     let config: ProviderConfig
 
     /// Per-API-key quotas, keyed by apiKeyId
-    private(set) var quotas: [String: ApiKeyQuota] = [:]
+    private(set) var quotas: [String: QuotaState] = [:]
 
     init(config: ProviderConfig) {
         self.config = config
 
         // Initialize quota entries for all API keys
         for key in config.apiKeys {
-            quotas[key.id] = ApiKeyQuota(status: .loading)
+            quotas[key.id] = .loading
         }
     }
 
     // MARK: - Provider Protocol
 
     func refreshUsage() async {
-        // Minimax uses same quota pattern as Zhipu
-        // TODO: Implement Minimax-specific quota API when available
+        if !config.apiKeys.isEmpty {
+            Logger.log("Minimax", "Refreshing...")
+        }
         await withTaskGroup(of: Void.self) { group in
             for apiKey in config.apiKeys {
                 group.addTask {
@@ -42,8 +43,10 @@ class MinimaxProvider: AIProvider {
         }
     }
 
+    var hasCustomDropdownPanel: Bool { false }
+
     func makeDropdownPanel() -> any View {
-        MinimaxProviderPanel(provider: self)
+        EmptyView()
     }
 
     func makeSettingsView() -> (any View)? {
@@ -53,24 +56,34 @@ class MinimaxProvider: AIProvider {
     // MARK: - Quota Management
 
     /// Get quota for a specific API key
-    func quota(for apiKeyId: String) -> ApiKeyQuota {
-        quotas[apiKeyId] ?? ApiKeyQuota(status: .error("API key not found"))
+    func quota(for apiKeyId: String) -> QuotaState {
+        quotas[apiKeyId] ?? .loaded([])
     }
 
     /// Refresh quota for a single API key
     private func refreshQuota(for apiKey: ApiKeyConfig) async {
-        // Set to loading state first
-        quotas[apiKey.id] = ApiKeyQuota(status: .loading)
+        quotas[apiKey.id] = .loading
 
-        // TODO: Implement Minimax quota API
-        // For now, mark as error since API is not yet implemented
-        quotas[apiKey.id] = ApiKeyQuota(status: .error("Not implemented"))
+        let result = await MiniMaxQuotaService.fetchQuota(apiKey: apiKey.key)
+
+        switch result {
+        case .success(let items):
+            if let percentage = items.first?.percentage {
+                Logger.log("Minimax", "Quota: \(Int(percentage ?? 0))%")
+            }
+            quotas[apiKey.id] = .loaded(items)
+        case .failure(let error):
+            Logger.error("Minimax", error.localizedDescription)
+            quotas[apiKey.id] = .loaded([
+                QuotaItem(title: "Session", status: .error(error.localizedDescription))
+            ])
+        }
     }
 
     /// Register a new API key (called when API key is added)
     func registerApiKey(_ apiKey: ApiKeyConfig) {
         if quotas[apiKey.id] == nil {
-            quotas[apiKey.id] = ApiKeyQuota(status: .loading)
+            quotas[apiKey.id] = .loading
         }
     }
 }

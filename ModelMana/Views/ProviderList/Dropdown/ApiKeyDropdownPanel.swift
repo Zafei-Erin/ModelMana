@@ -40,13 +40,15 @@ struct ApiKeyDropdownPanel: View {
                 emptyState
             } else {
                 ForEach(Array(provider.apiKeys.enumerated()), id: \.element.id) { index, key in
-                    keyButton(for: key)
+                    keyEntry(for: key)
                     if index < provider.apiKeys.count - 1 {
                         Divider()
                             .padding(.horizontal, 6)
                     }
                 }
             }
+
+            additionalContent
         }
     }
 
@@ -58,80 +60,98 @@ struct ApiKeyDropdownPanel: View {
             .padding(12)
     }
 
-    private func keyButton(for key: ApiKeyConfig) -> some View {
-        HoverButton(
+    private func keyEntry(for key: ApiKeyConfig) -> some View {
+        CredentialEntryLayout(
+            title: key.name,
             isSelected: key.id == selectedApiKeyId,
-            action: {
-                onSelectApiKey(key.id)
-            }
+            action: { onSelectApiKey(key.id) }
         ) {
-            keyLabel(for: key)
+            quotaProgressView(for: key)
         }
     }
 
-    private func keyLabel(for key: ApiKeyConfig) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                keyIcon(for: key)
-                Text(key.name)
-                    .font(.system(size: 13, weight: .semibold))
-
-                Spacer()
-            }
-
-            quotaProgressView(for: key)
+    @ViewBuilder
+    private var additionalContent: some View {
+        if let aiProvider = ProviderRegistry.shared.provider(withId: provider.id),
+           let additional = aiProvider.makeAdditionalDropdownContent() {
+            Divider().padding(.horizontal, 6)
+            AnyView(additional)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
     }
 
     @ViewBuilder
     private func quotaProgressView(for key: ApiKeyConfig) -> some View {
-        let quota = AppState.shared.getQuota(for: key.id)
+        let state: QuotaState = {
+            switch provider.id {
+            case "zhipu":
+                return ProviderRegistry.shared.zhipu.quota(for: key.id)
+            case "minimax":
+                return ProviderRegistry.shared.minimax.quota(for: key.id)
+            case "claude":
+                return ProviderRegistry.shared.claude.quota(for: key.id)
+            default:
+                return .loaded([])
+            }
+        }()
 
-        VStack(alignment: .leading, spacing: 2) {
-            switch quota.status {
-            case .loading:
-                ProgressView()
-                    .scaleEffect(0.3)
+        switch state {
+        case .loading:
+            ProgressView()
+                .scaleEffect(0.3)
+                .padding(.top, 6)
 
-            case .success(let percentage, _):
-                HStack(spacing: 6) {
+        case .loaded(let items):
+            if items.isEmpty {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        renderQuotaItem(item)
+                    }
+                }
+                .padding(.top, 6)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func renderQuotaItem(_ item: QuotaItem) -> some View {
+        switch item.status {
+        case .success(let percentage, _):
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    Text(item.title)
+                        .font(.system(size: 11))
+                    Spacer()
+                    if let resetText = item.resetTimeText {
+                        Text(resetText)
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     ProgressView(value: percentage / 100, total: 1.0)
                         .progressViewStyle(BlackProgressStyle())
-
                     Text("\(Int(percentage))%")
                         .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
                 }
+                .frame(height: 12)
+            }
 
-                if let resetText = quota.resetTimeText {
-                    Text(resetText)
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-
-            case .error:
+        case .error:
+            VStack(alignment: .leading, spacing: 0) {
+                Text(item.title)
+                    .font(.system(size: 11))
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 8))
+                        .font(.system(size: 11))
                         .foregroundStyle(.red)
                     Text("failed to fetch")
-                        .font(.system(size: 8))
+                        .font(.system(size: 11))
                         .foregroundStyle(.red)
                 }
             }
         }
-        .padding(.leading, 24)
-    }
-
-    private func keyIcon(for key: ApiKeyConfig) -> some View {
-        let isSelected = key.id == selectedApiKeyId
-        let iconName = isSelected ? "checkmark.circle.fill" : "circle"
-        return Image(systemName: iconName)
-            .font(.system(size: 14))
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
     }
 }

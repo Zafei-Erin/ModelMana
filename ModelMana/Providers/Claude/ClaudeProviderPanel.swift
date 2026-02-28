@@ -75,11 +75,13 @@ struct ClaudeProviderPanel: View {
     private func apiKeyCard(for key: ApiKeyConfig) -> some View {
         let isSelected = provider.selectedCredential?.isManualKey(selectedId: selectedApiKeyId) == true
             && selectedApiKeyId == key.id
-        let quota = provider.quota(for: key.id)
+        let quotaState = provider.quota(for: key.id)
         var progressValue: Double?
         var progressText: String?
 
-        if case .success(let percentage, _) = quota.status {
+        if case .loaded(let items) = quotaState,
+           let firstItem = items.first,
+           case .success(let percentage, _) = firstItem.status {
             progressValue = percentage
             progressText = "\(Int(percentage))%"
         }

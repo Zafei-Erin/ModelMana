@@ -43,7 +43,7 @@ final class ClaudeLoginService {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = [
             "-e",
-            "tell application \"Terminal\" to do script \"\(withCommand.replacingOccurrences(of: "\"", with: "\\\""))\""
+            "tell application \"Terminal\"\ndo script \"\(withCommand.replacingOccurrences(of: "\"", with: "\\\""))\"\nactivate\nend tell"
         ]
 
         do {

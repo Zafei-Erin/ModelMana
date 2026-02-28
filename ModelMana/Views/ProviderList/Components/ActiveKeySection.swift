@@ -21,7 +21,7 @@ struct ActiveKeySection: View {
         HStack(spacing: 12) {
             ProviderIcon(providerId: providerId, size: 24)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(displayName)
                     .font(.system(size: 12))
                     .fontWeight(.semibold)
@@ -78,30 +78,7 @@ struct ActiveKeySection: View {
     private var manualKeyRightSideInfo: some View {
         VStack(alignment: .trailing, spacing: 2) {
             if let apiKeyId {
-                let quota = AppState.shared.getQuota(for: apiKeyId)
-                switch quota.status {
-                case .loading:
-                    ProgressView()
-                        .scaleEffect(0.5)
-                case .success(let percentage, _):
-                    HStack(spacing: 6) {
-                        ProgressView(value: percentage / 100, total: 1.0)
-                            .progressViewStyle(BlackProgressStyle())
-
-                        Text("\(Int(percentage))%")
-                            .font(.system(size: 11))
-                            .fontWeight(.medium)
-                    }
-                    if let resetText = quota.resetTimeText {
-                        Text(resetText)
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
-                    }
-                case .error:
-                    Text("Error")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.red)
-                }
+                renderQuotaStatus(ProviderRegistry.shared.claude.quota(for: apiKeyId))
             }
         }
     }
@@ -228,31 +205,65 @@ struct ActiveKeySection: View {
                 renderQuotaStatus(ProviderRegistry.shared.minimax.quota(for: apiKeyId))
             } else if providerId == "claude" {
                 renderQuotaStatus(ProviderRegistry.shared.claude.quota(for: apiKeyId))
-            } else {
-                renderQuotaStatus(ApiKeyQuota(status: .error("Unknown provider")))
             }
         }
     }
 
     @ViewBuilder
-    private func renderQuotaStatus(_ quota: ApiKeyQuota) -> some View {
-        switch quota.status {
+    private func renderQuotaStatus(_ state: QuotaState) -> some View {
+        switch state {
         case .loading:
-            ProgressView().scaleEffect(0.3)
-        case .success(let percentage, _):
-            VStack(spacing: 2) {
-                HStack(spacing: 8) {
-                    ProgressView(value: percentage / 100, total: 1.0).progressViewStyle(BlackProgressStyle())
-                    Text("\(Int(percentage))%").font(.system(size: 10)).foregroundStyle(.secondary)
-                }
-                if let resetText = quota.resetTimeText {
-                    Text(resetText).font(.system(size: 9)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
+            ProgressView()
+                .scaleEffect(0.3)
+
+        case .loaded(let items):
+            if items.isEmpty {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        renderQuotaItem(item)
+                    }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func renderQuotaItem(_ item: QuotaItem) -> some View {
+        switch item.status {
+        case .success(let percentage, _):
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    Text(item.title)
+                        .font(.system(size: 11))
+                    Spacer()
+                    if let resetText = item.resetTimeText {
+                        Text(resetText)
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    ProgressView(value: percentage / 100, total: 1.0)
+                        .progressViewStyle(BlackProgressStyle())
+                    Text("\(Int(percentage))%")
+                        .font(.system(size: 9))
+                }
+                .frame(height: 12)
+            }
+
         case .error:
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(.red)
-                Text("failed to fetch").font(.system(size: 10)).foregroundStyle(.red)
+            HStack(spacing: 4) {
+                Text(item.title)
+                    .font(.system(size: 11))
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+                Text("failed to fetch")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
             }
         }
     }

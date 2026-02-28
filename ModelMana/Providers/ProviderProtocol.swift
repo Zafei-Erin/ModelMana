@@ -25,9 +25,21 @@ protocol AIProvider: Observable, Identifiable {
     /// Refresh usage data for this provider
     func refreshUsage() async
 
+    /// Whether this provider has a custom dropdown panel
+    var hasCustomDropdownPanel: Bool { get }
+
     /// Get the dropdown panel view for this provider
     func makeDropdownPanel() -> any View
 
     /// Get provider-specific settings view (optional)
     func makeSettingsView() -> (any View)?
+
+    /// Additional dropdown content rendered below API key list (optional)
+    func makeAdditionalDropdownContent() -> (any View)?
+}
+
+// MARK: - Default Implementations
+
+extension AIProvider {
+    func makeAdditionalDropdownContent() -> (any View)? { nil }
 }

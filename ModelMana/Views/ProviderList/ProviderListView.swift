@@ -249,7 +249,8 @@ struct ProviderListView: View {
         do {
             try SettingsFileService.writeSettings(
                 baseUrl: providerConfig.baseUrl,
-                apiKey: apiKeyConfig.key
+                apiKey: apiKeyConfig.key,
+                modelConfig: providerConfig.modelConfig
             )
 
             // Update configuration in one go to avoid triggering multiple reloads
@@ -310,22 +311,11 @@ struct ProviderListView: View {
         panel.hasShadow = true
 
         let contentView: NSHostingView<AnyView>
-        if provider.id == "claude" {
+        // Use provider's custom dropdown panel if available, otherwise use generic panel
+        if let aiProvider = ProviderRegistry.shared.provider(withId: provider.id),
+           aiProvider.hasCustomDropdownPanel {
             contentView = NSHostingView(
-                rootView: AnyView(
-                    ClaudeDropdownPanel(
-                        provider: provider,
-                        onSelectApiKey: { apiKeyId in
-                            selectApiKey(providerConfig: provider, apiKeyId: apiKeyId)
-                        },
-                        onSelectSubscription: {
-                            selectSubscription()
-                        },
-                        onSelectConsole: {
-                            selectConsole()
-                        }
-                    )
-                )
+                rootView: AnyView(aiProvider.makeDropdownPanel())
             )
         } else {
             contentView = NSHostingView(

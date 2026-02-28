@@ -2,35 +2,45 @@
 //  ApiKeyQuota.swift
 //  ModelMana
 //
-//  Created by refactoring from ProviderConfig.swift
+//  Quota data models for API key usage tracking
 //
 
 import Foundation
 
-/// API Key quota information
-struct ApiKeyQuota {
+/// A single quota measurement (e.g. session tokens, MCP time)
+struct QuotaItem {
     enum Status {
-        case loading
         case success(percentage: Double, nextResetTime: TimeInterval)
         case error(String)
     }
 
-    var status: Status
-    var lastUpdated: Date
-
-    init(status: Status, lastUpdated: Date = Date()) {
-        self.status = status
-        self.lastUpdated = lastUpdated
-    }
+    let title: String
+    let status: Status
 
     /// Formatted reset time display
     var resetTimeText: String? {
         guard case .success(_, let nextResetTime) = status else { return nil }
-        let formatter = DateComponentsFormatter()
-        formatter.unitsStyle = .abbreviated
-        formatter.allowedUnits = [.hour, .minute]
-        let time = formatter.string(from: Date(), to: Date(timeIntervalSince1970: nextResetTime / 1000)) ?? ""
-        return "resets in " + time
+        let interval = Date(timeIntervalSince1970: nextResetTime / 1000).timeIntervalSinceNow
+
+        if interval <= 0 {
+            return "Resets soon"
+        }
+
+        let days = Int(interval / 86400)
+        let hours = Int((interval.truncatingRemainder(dividingBy: 86400)) / 3600)
+        let minutes = Int((interval.truncatingRemainder(dividingBy: 3600)) / 60)
+
+        if days > 0 {
+            var parts = ["\(days)d"]
+            if hours > 0 {
+                parts.append("\(hours)h")
+            }
+            return "Resets in " + parts.joined(separator: " ")
+        } else if hours > 0 {
+            return "Resets in \(hours)h"
+        } else {
+            return "Resets in \(minutes)m"
+        }
     }
 
     /// Get percentage if available
@@ -40,4 +50,10 @@ struct ApiKeyQuota {
         }
         return nil
     }
+}
+
+/// Aggregated quota state for an API key
+enum QuotaState {
+    case loading
+    case loaded([QuotaItem])
 }

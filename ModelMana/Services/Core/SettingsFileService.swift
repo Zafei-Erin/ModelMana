@@ -45,8 +45,15 @@ struct SettingsFileService {
         return URL(fileURLWithPath: realHome).appendingPathComponent(".claude.json")
     }
 
+    private static let modelEnvKeys: [(WritableKeyPath<ModelConfig, String?>, String)] = [
+        (\.opusModel, "ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        (\.sonnetModel, "ANTHROPIC_DEFAULT_SONNET_MODEL"),
+        (\.haikuModel, "ANTHROPIC_DEFAULT_HAIKU_MODEL"),
+        (\.subagentModel, "CLAUDE_CODE_SUBAGENT_MODEL"),
+    ]
+
     /// 写入 Claude settings.json
-    static func writeSettings(baseUrl: String, apiKey: String) throws {
+    static func writeSettings(baseUrl: String, apiKey: String, modelConfig: ModelConfig? = nil) throws {
         let path = settingsPath
 
         // 确保目录存在
@@ -64,13 +71,23 @@ struct SettingsFileService {
             }
         }
 
-        // 构建 env 部分
-        existing["env"] = [
-            "ANTHROPIC_AUTH_TOKEN": apiKey,
-            "ANTHROPIC_BASE_URL": baseUrl,
-            "API_TIMEOUT_MS": "3000000",
-            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 1
-        ]
+        // 构建 env 部分 (merge to preserve user's custom env vars)
+        var env = existing["env"] as? [String: Any] ?? [:]
+        env["ANTHROPIC_AUTH_TOKEN"] = apiKey
+        env["ANTHROPIC_BASE_URL"] = baseUrl
+        env["API_TIMEOUT_MS"] = "3000000"
+        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = 1
+
+        // Model config: set if non-empty, remove if empty/nil
+        for (keyPath, envKey) in modelEnvKeys {
+            if let value = modelConfig?[keyPath: keyPath], !value.isEmpty {
+                env[envKey] = value
+            } else {
+                env.removeValue(forKey: envKey)
+            }
+        }
+
+        existing["env"] = env
 
         Logger.log("Settings", "Updated")
 
@@ -109,6 +126,12 @@ struct SettingsFileService {
         env.removeValue(forKey: "ANTHROPIC_BASE_URL")
         env["API_TIMEOUT_MS"] = "3000000"
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = 1
+
+        // Remove model override keys (keychain auth = direct Claude, no model overrides)
+        for (_, envKey) in modelEnvKeys {
+            env.removeValue(forKey: envKey)
+        }
+
         existing["env"] = env
 
         // Write file

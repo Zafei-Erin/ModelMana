@@ -17,14 +17,14 @@ class ZhipuProvider: AIProvider {
     let config: ProviderConfig
 
     /// Per-API-key quotas, keyed by apiKeyId
-    private(set) var quotas: [String: ApiKeyQuota] = [:]
+    private(set) var quotas: [String: QuotaState] = [:]
 
     init(config: ProviderConfig) {
         self.config = config
 
         // Initialize quota entries for all API keys
         for key in config.apiKeys {
-            quotas[key.id] = ApiKeyQuota(status: .loading)
+            quotas[key.id] = .loading
         }
     }
 
@@ -44,8 +44,10 @@ class ZhipuProvider: AIProvider {
         }
     }
 
+    var hasCustomDropdownPanel: Bool { false }
+
     func makeDropdownPanel() -> any View {
-        ZhipuProviderPanel(provider: self)
+        EmptyView()
     }
 
     func makeSettingsView() -> (any View)? {
@@ -55,33 +57,33 @@ class ZhipuProvider: AIProvider {
     // MARK: - Quota Management
 
     /// Get quota for a specific API key
-    func quota(for apiKeyId: String) -> ApiKeyQuota {
-        quotas[apiKeyId] ?? ApiKeyQuota(status: .error("API key not found"))
+    func quota(for apiKeyId: String) -> QuotaState {
+        quotas[apiKeyId] ?? .loaded([])
     }
 
     /// Refresh quota for a single API key
     private func refreshQuota(for apiKey: ApiKeyConfig) async {
-        // Set to loading state first
-        quotas[apiKey.id] = ApiKeyQuota(status: .loading)
+        quotas[apiKey.id] = .loading
 
         let result = await ZhipuQuotaService.fetchQuota(apiKey: apiKey.key)
 
         switch result {
-        case .success(let data):
-            Logger.log("Zhipu", "Quota: \(data.percentage)%")
-            quotas[apiKey.id] = ApiKeyQuota(
-                status: .success(percentage: data.percentage, nextResetTime: data.nextResetTime)
-            )
+        case .success(let items):
+            Logger.log("Zhipu", "Quota: \(items.compactMap { $0.percentage }.map { "\(Int($0))%" }.joined(separator: ", "))")
+            quotas[apiKey.id] = .loaded(items)
         case .failure(let error):
             Logger.error("Zhipu", error.localizedDescription)
-            quotas[apiKey.id] = ApiKeyQuota(status: .error(error.localizedDescription))
+            quotas[apiKey.id] = .loaded([
+                QuotaItem(title: "Session (5h)", status: .error(error.localizedDescription)),
+                QuotaItem(title: "MCP", status: .error(error.localizedDescription))
+            ])
         }
     }
 
     /// Register a new API key (called when API key is added)
     func registerApiKey(_ apiKey: ApiKeyConfig) {
         if quotas[apiKey.id] == nil {
-            quotas[apiKey.id] = ApiKeyQuota(status: .loading)
+            quotas[apiKey.id] = .loading
         }
     }
 }
