@@ -46,6 +46,32 @@ class ZhipuProvider: AIProvider {
 
     var hasCustomDropdownPanel: Bool { false }
 
+    /// Get current usage percentage from selected API key's quota (5h session)
+    var usagePercentage: Double? {
+        let selectedKeyId = ProviderRegistry.shared.configuration.selectedApiKeyId
+        guard let selectedKeyId = selectedKeyId,
+              !selectedKeyId.isEmpty,
+              case .loaded(let items) = quota(for: selectedKeyId) else {
+            // Fallback: get first available quota
+            return firstAvailableQuotaPercentage
+        }
+        // Get Session (5h) quota
+        return items.first(where: { $0.title.contains("5h") })?.percentage
+    }
+
+    /// Get first available quota percentage as fallback
+    private var firstAvailableQuotaPercentage: Double? {
+        for key in config.apiKeys {
+            if case .loaded(let items) = quota(for: key.id) {
+                if let sessionQuota = items.first(where: { $0.title.contains("5h") }),
+                   let percentage = sessionQuota.percentage {
+                    return percentage
+                }
+            }
+        }
+        return nil
+    }
+
     func makeDropdownPanel() -> any View {
         EmptyView()
     }

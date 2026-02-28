@@ -36,10 +36,15 @@ protocol AIProvider: Observable, Identifiable {
 
     /// Additional dropdown content rendered below API key list (optional)
     func makeAdditionalDropdownContent() -> (any View)?
+
+    /// Get current usage percentage for menu bar icon (0-100, nil if unavailable)
+    var usagePercentage: Double? { get }
 }
 
 // MARK: - Default Implementations
 
 extension AIProvider {
     func makeAdditionalDropdownContent() -> (any View)? { nil }
+
+    var usagePercentage: Double? { nil }
 }

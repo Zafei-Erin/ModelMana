@@ -45,6 +45,31 @@ class MinimaxProvider: AIProvider {
 
     var hasCustomDropdownPanel: Bool { false }
 
+    /// Get current usage percentage from selected API key's quota (session)
+    var usagePercentage: Double? {
+        let selectedKeyId = ProviderRegistry.shared.configuration.selectedApiKeyId
+        guard let selectedKeyId = selectedKeyId,
+              !selectedKeyId.isEmpty,
+              case .loaded(let items) = quota(for: selectedKeyId) else {
+            // Fallback: get first available quota
+            return firstAvailableQuotaPercentage
+        }
+        // Get first available quota (Minimax has single session quota)
+        return items.first?.percentage
+    }
+
+    /// Get first available quota percentage as fallback
+    private var firstAvailableQuotaPercentage: Double? {
+        for key in config.apiKeys {
+            if case .loaded(let items) = quota(for: key.id) {
+                if let percentage = items.first?.percentage {
+                    return percentage
+                }
+            }
+        }
+        return nil
+    }
+
     func makeDropdownPanel() -> any View {
         EmptyView()
     }
