@@ -14,6 +14,14 @@ class AppState {
 
     // MARK: - Configuration
 
+    /// Current usage percentage for menu bar icon (0-100, nil if unavailable)
+    var currentUsagePercentage: Double? {
+        ProviderRegistry.shared.currentUsagePercentage
+    }
+
+    /// Trigger for menu bar icon update (incremented after each refresh)
+    var iconUpdateTrigger: Int = 0
+
     /// Application configuration - delegates to ProviderRegistry
     var configuration: AppConfiguration {
         get { ProviderRegistry.shared.configuration }

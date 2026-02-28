@@ -47,6 +47,11 @@ class ProviderRegistry {
         return allProviders.first { $0.id == selectedId }
     }
 
+    /// Current usage percentage for menu bar icon (0-100, nil if unavailable)
+    var currentUsagePercentage: Double? {
+        selectedProvider?.usagePercentage
+    }
+
     /// Check if any provider is currently loading
     var isAnyProviderLoading: Bool {
         claude.isSubscriptionLoading || claude.isConsoleLoading
@@ -114,6 +119,9 @@ class ProviderRegistry {
             group.addTask { await self.zhipu.refreshUsage() }
             group.addTask { await self.minimax.refreshUsage() }
         }
+
+        // Trigger icon update after refresh
+        AppState.shared.iconUpdateTrigger += 1
     }
 
     private func startRefreshTimer() {
