@@ -70,8 +70,8 @@ struct MiniMaxQuotaService {
                     continue
                 }
 
-                // Calculate percentage: (used / total) * 100
-                let percentage = totalCount > 0 ? (usageCount / totalCount) * 100 : 0
+                // Calculate used percentage: API returns remaining, so subtract from 100
+                let percentage = totalCount > 0 ? (1.0 - (usageCount / totalCount)) * 100 : 0
 
                 // Use model name as title (e.g., "M2", "M2.1", "M2.5")
                 let title = modelName.replacingOccurrences(of: "MiniMax-", with: "")
