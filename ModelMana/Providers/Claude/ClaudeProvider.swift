@@ -70,6 +70,17 @@ class ClaudeProvider: AIProvider {
 
     var hasCustomDropdownPanel: Bool { false }
 
+    /// Get current usage percentage for menu bar icon
+    /// Only subscription has percentage; API key and console return nil (show default icon)
+    var usagePercentage: Double? {
+        switch selectedCredential {
+        case .subscription:
+            return subscriptionUsage?.fiveHour?.utilization
+        case .manualKey, .console, .none:
+            return nil
+        }
+    }
+
     func makeDropdownPanel() -> any View {
         ClaudeProviderPanel(provider: self)
     }
